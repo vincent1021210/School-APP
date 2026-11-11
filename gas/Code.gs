@@ -24,35 +24,42 @@ function doGet(e) {
 }
 
 function handleApi_(action, params) {
+  var callback = params && params.callback;
   try {
     if (action === 'getDailySummary' || action === 'summary') {
-      return json_(getDailySummaryFast_());
+      return json_(getDailySummaryFast_(), callback);
     }
     if (action === 'health') {
-      return json_({
-        ok: true,
-        project: '學校APP',
-        spreadsheetId: SPREADSHEET_ID,
-        timezone: Session.getScriptTimeZone(),
-        now: new Date().toISOString(),
-      });
+      return json_(
+        {
+          ok: true,
+          project: '學校APP',
+          spreadsheetId: SPREADSHEET_ID,
+          timezone: Session.getScriptTimeZone(),
+          now: new Date().toISOString(),
+        },
+        callback,
+      );
     }
     if (action === 'setup') {
       ensureSchema_();
       seedDemoIfEmpty_();
       invalidateDailyCache_();
-      return json_({ ok: true, message: 'schema ready' });
+      return json_({ ok: true, message: 'schema ready' }, callback);
     }
     if (action === 'purgeCache') {
       invalidateDailyCache_();
-      return json_({ ok: true, message: 'cache cleared' });
+      return json_({ ok: true, message: 'cache cleared' }, callback);
     }
-    return json_({ error: 'unknown_action', action: action });
+    return json_({ error: 'unknown_action', action: action }, callback);
   } catch (err) {
-    return json_({
-      error: 'server_error',
-      message: String(err && err.message ? err.message : err),
-    });
+    return json_(
+      {
+        error: 'server_error',
+        message: String(err && err.message ? err.message : err),
+      },
+      callback,
+    );
   }
 }
 
@@ -244,8 +251,15 @@ function saveTodayNotices(notices) {
   return getDailySummaryFast_();
 }
 
-function json_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
+function json_(obj, callbackName) {
+  var body = JSON.stringify(obj);
+  var cb = String(callbackName || '').replace(/[^\w.$]/g, '');
+  if (cb) {
+    return ContentService.createTextOutput(cb + '(' + body + ');').setMimeType(
+      ContentService.MimeType.JAVASCRIPT,
+    );
+  }
+  return ContentService.createTextOutput(body).setMimeType(
     ContentService.MimeType.JSON,
   );
 }

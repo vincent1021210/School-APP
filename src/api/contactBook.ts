@@ -85,47 +85,81 @@ function saveCache(summary: DailySummary): void {
   localStorage.setItem(STORAGE_META_KEY, stamp)
 }
 
+function fetchJsonp(url: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const callback = `schoolAppCb_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+    const script = document.createElement('script')
+    const timer = window.setTimeout(() => {
+      cleanup()
+      reject(new ContactBookApiError('同步逾時', 'network'))
+    }, 20000)
+
+    const cleanup = () => {
+      window.clearTimeout(timer)
+      script.remove()
+      delete (window as unknown as Record<string, unknown>)[callback]
+    }
+
+    ;(window as unknown as Record<string, unknown>)[callback] = (data: unknown) => {
+      cleanup()
+      resolve(data)
+    }
+
+    script.src = `${url}${url.includes('?') ? '&' : '?'}callback=${callback}`
+    script.onerror = () => {
+      cleanup()
+      reject(new ContactBookApiError('無法連線到聯絡簿伺服器', 'network'))
+    }
+    document.head.appendChild(script)
+  })
+}
+
 /**
  * 拉取今日公佈欄摘要。
- * 1) 優先打 GAS JSON API（?format=json&action=getDailySummary）
- * 2) 若仍回 HTML（尚未部署 API 片段）→ needs_api
+ * 開發：Vite proxy + fetch
+ * 正式站：JSONP（Apps Script 無法設 CORS）
  */
 export async function fetchDailySummary(): Promise<DailySummary> {
-  let response: Response
-  try {
-    response = await fetch(jsonEndpoint('getDailySummary'), {
-      method: 'GET',
-      headers: { Accept: 'application/json, text/plain, */*' },
-      redirect: 'follow',
-      cache: 'no-store',
-    })
-  } catch {
-    throw new ContactBookApiError('無法連線到聯絡簿伺服器', 'network')
-  }
-
-  if (!response.ok) {
-    throw new ContactBookApiError(`伺服器回應 ${response.status}`, 'http')
-  }
-
-  const contentType = response.headers.get('content-type') ?? ''
-  const text = await response.text()
-
-  if (
-    contentType.includes('text/html') ||
-    text.trimStart().startsWith('<!DOCTYPE') ||
-    text.trimStart().startsWith('<html')
-  ) {
-    throw new ContactBookApiError(
-      '目前網址仍回傳網頁，尚未啟用 JSON API。請把 gas/JsonApi.gs 片段部署到 Apps Script 後再同步。',
-      'needs_api',
-    )
-  }
-
   let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    throw new ContactBookApiError('JSON 解析失敗', 'parse')
+
+  if (import.meta.env.DEV) {
+    let response: Response
+    try {
+      response = await fetch(jsonEndpoint('getDailySummary'), {
+        method: 'GET',
+        headers: { Accept: 'application/json, text/plain, */*' },
+        redirect: 'follow',
+        cache: 'no-store',
+      })
+    } catch {
+      throw new ContactBookApiError('無法連線到聯絡簿伺服器', 'network')
+    }
+
+    if (!response.ok) {
+      throw new ContactBookApiError(`伺服器回應 ${response.status}`, 'http')
+    }
+
+    const contentType = response.headers.get('content-type') ?? ''
+    const text = await response.text()
+
+    if (
+      contentType.includes('text/html') ||
+      text.trimStart().startsWith('<!DOCTYPE') ||
+      text.trimStart().startsWith('<html')
+    ) {
+      throw new ContactBookApiError(
+        '目前網址仍回傳網頁，尚未啟用 JSON API。請把 gas/Code.gs 部署到 Apps Script 後再同步。',
+        'needs_api',
+      )
+    }
+
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      throw new ContactBookApiError('JSON 解析失敗', 'parse')
+    }
+  } else {
+    parsed = await fetchJsonp(jsonEndpoint('getDailySummary'))
   }
 
   const summary = normalizeSummary(parsed)
