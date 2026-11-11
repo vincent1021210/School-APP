@@ -1,0 +1,16 @@
+---
+description: 每次完成工作後自動 commit 並 push 到 GitHub
+alwaysApply: true
+---
+
+# 自動推上 Git
+
+每當一輪任務完成（功能做完、修好 bug、更新後端／前端），**必須**自動：
+
+1. `git status` / `git diff` / `git log` 檢查變更
+2. 暂存相關檔案（勿提交密鑰、`.env`、憑證）
+3. 建立簡潔 commit（說明為什麼）
+4. `git push -u origin HEAD`（或目前追蹤分支）推到 GitHub
+5. 回報 commit 摘要與遠端狀態
+
+例外：使用者明確說「不要推」「先不要 commit」時才跳過。

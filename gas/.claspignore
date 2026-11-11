@@ -1,0 +1,7 @@
+README.md
+JsonApi.gs
+.clasp.json
+.claspignore
+**/*.md
+# 本地推送用複本；以 Code.gs 為唯一來源後再複製
+# （clasp 專案內若已有「程式碼.gs」請在編輯器刪除重複檔，避免函式衝突）
