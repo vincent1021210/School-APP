@@ -51,6 +51,9 @@ function handleApi_(action, params) {
       invalidateDailyCache_();
       return json_({ ok: true, message: 'cache cleared' }, callback);
     }
+    if (action === 'importAssignedHomework') {
+      return json_(importAssignedHomework(), callback);
+    }
     return json_({ error: 'unknown_action', action: action }, callback);
   } catch (err) {
     return json_(
@@ -211,6 +214,23 @@ function seedDemoIfEmpty_() {
   ]);
 }
 
+/** 匯入指定的今日作業（由 clasp 執行，無需帶參數） */
+function importAssignedHomework() {
+  var notices = [
+    '耆ㄑㄧˊ宿、嗜ㄕˋ 痂ㄐㄧㄚ成癖ㄆㄧˇ、不待蓍ㄕ龜、葬ㄗㄤˋ身之地',
+    '英講到65',
+    '生紀到58',
+    '生講到47',
+    '明考英單13～27 生物3-1 3-2',
+    '學思達p92～95',
+    '數講到46',
+    '數課到147',
+    '明天記得交 38元 童軍繩費給童家老師',
+  ];
+  saveTodayNotices(notices);
+  return saveTodaySubjects(['英文']);
+}
+
 function invalidateDailyCache_() {
   var tz = Session.getScriptTimeZone();
   var todayKey = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd');
@@ -240,6 +260,39 @@ function saveTodayNotices(notices) {
   }
 
   var list = notices || [];
+  if (list.length) {
+    var rows = list.map(function (text) {
+      return [todayKey, String(text)];
+    });
+    var startRow = sheet.getLastRow() + 1;
+    sheet.getRange(startRow, 1, rows.length, 2).setValues(rows);
+  }
+  invalidateDailyCache_();
+  return getDailySummaryFast_();
+}
+
+/**
+ * 老師端可呼叫：批次寫入今日成績科目後清快取
+ * subjects: string[]
+ */
+function saveTodaySubjects(subjects) {
+  ensureSchema_();
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_SUBJECTS);
+  var tz = Session.getScriptTimeZone();
+  var todayKey = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd');
+
+  var last = sheet.getLastRow();
+  if (last >= 2) {
+    var values = sheet.getRange(2, 1, last - 1, 2).getDisplayValues();
+    for (var i = values.length - 1; i >= 0; i--) {
+      if (normalizeDateKey_(String(values[i][0] || ''), tz) === todayKey) {
+        sheet.deleteRow(i + 2);
+      }
+    }
+  }
+
+  var list = subjects || [];
   if (list.length) {
     var rows = list.map(function (text) {
       return [todayKey, String(text)];
