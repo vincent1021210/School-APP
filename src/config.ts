@@ -19,10 +19,6 @@ export const SPREADSHEET_ID = '1DrEsw-pBQ0-bhmgpkkF_J5y7yhgu1dLJA_aO9an-pS8'
 export const SPREADSHEET_URL =
   `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit`
 
-/** 舊版家庭聯絡簿公開頁（系統 Tab 備用） */
-export const LEGACY_CONTACT_BOOK_URL =
-  'https://script.google.com/macros/s/AKfycbwBE0IVr9JuF92lpHMTUQiTgIpjxBYZWidAXHEfICwumlHggm31kfbD3Y3_mlznVuES/exec'
-
 /** App 角色：放學公佈欄為主 */
 export const APP_ROLE = 'dismissal_board' as const
 

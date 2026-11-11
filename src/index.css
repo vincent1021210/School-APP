@@ -237,31 +237,6 @@ a {
   color: var(--error-text);
 }
 
-.webview-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 60dvh;
-}
-
-.webview-frame {
-  width: 100%;
-  min-height: 62dvh;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
-}
-
-.iframe-fallback {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--muted);
-}
-
-.iframe-fallback a {
-  color: var(--accent);
-}
-
 .bottom-nav {
   position: sticky;
   bottom: 0;
