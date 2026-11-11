@@ -26,13 +26,18 @@
 
 https://vincent1021210.github.io/School-APP/
 
-GitHub Pages 需部署 **建置後的 `dist`**（不是原始碼）。推上 `main` 後由 Actions 自動部署；也可手動：
+**白畫面原因**：若 Pages 指到 `main` 根目錄，會拿到開發用 `index.html`（瀏覽器無法跑 `.tsx`）。
+
+請到 Repo → **Settings → Pages**，擇一設定：
+
+1. **Branch: `gh-pages` / folder: `/`（root）**（已自動部署建置檔），或  
+2. **Branch: `main` / folder: `/docs`**（`docs/` 內為建置檔）
+
+也可手動重建：
 
 ```bash
 npm run deploy:pages
 ```
-
-Repo Settings → Pages → Source 請選 **GitHub Actions**。
 
 ## 開發
 
