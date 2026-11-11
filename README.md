@@ -1,26 +1,26 @@
-# 家庭聯絡簿 App
+# 家庭聯絡簿 App（學校APP）
 
-以 **放學公佈欄** 為主的手機版網頁 App，資料來源為既有 Google Apps Script：
+放學公佈欄為主的手機版網頁 App。
 
-https://script.google.com/macros/s/AKfycbwBE0IVr9JuF92lpHMTUQiTgIpjxBYZWidAXHEfICwumlHggm31kfbD3Y3_mlznVuES/exec
+## 連結
 
-## 畫面
+| 角色 | 網址 |
+|------|------|
+| 前端 Repo | https://github.com/vincent1021210/School-APP |
+| 後端 Apps Script | https://script.google.com/home/projects/1NX2iocrNfbDB6jpRKdyiNEL3k3vGrT2wYAMXMM0qf4FY_zhluNG54Rt5/edit |
+| 試算表資料庫 | https://docs.google.com/spreadsheets/d/1DrEsw-pBQ0-bhmgpkkF_J5y7yhgu1dLJA_aO9an-pS8/edit |
+| JSON API | https://script.google.com/macros/s/AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg/exec |
 
-| Tab | 說明 |
-|-----|------|
-| 今日 | 今日聯絡事項、成績登載科目 |
-| 系統 | 內嵌／開啟完整 GAS 系統（家長／老師登入） |
-| 更新 | 同步狀態、立即更新、JSON API 部署說明 |
+## 速度優化
 
-## 資料橋接
+- **後端**：`CacheService` 快取今日摘要 120 秒；只讀需要欄位；寫入後清快取
+- **前端**：先顯示本機快取，背景再更新（stale-while-revalidate）
 
-Apps Script 預設回傳 HTML，外部 App 無法呼叫 `google.script.run`。
+## 試算表工作表
 
-1. 把 [`gas/JsonApi.gs`](gas/JsonApi.gs) 的 JSON 分支合併進既有 `doGet`
-2. 重新部署 Web App
-3. App 請求 `?format=json&action=getDailySummary` 取得今日摘要並顯示在「今日」
-
-未部署 API 前，「今日」會提示改開完整系統；「系統」Tab 仍可使用原網頁。
+- `今日事項`：日期、內容
+- `成績科目`：日期、科目
+- `設定`：班級名稱等
 
 ## 開發
 
@@ -29,9 +29,16 @@ npm install
 npm run dev
 ```
 
+後端更新（需已 `clasp login`）：
+
+```bash
+cd gas
+clasp push --force
+clasp deploy -i AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg -d "school-app-fast-json-v1"
+```
+
 ## 建置
 
 ```bash
 npm run build
-npm run preview
 ```

@@ -97,6 +97,7 @@ export async function fetchDailySummary(): Promise<DailySummary> {
       method: 'GET',
       headers: { Accept: 'application/json, text/plain, */*' },
       redirect: 'follow',
+      cache: 'no-store',
     })
   } catch {
     throw new ContactBookApiError('無法連線到聯絡簿伺服器', 'network')

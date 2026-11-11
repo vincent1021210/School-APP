@@ -4,7 +4,7 @@ import { useDailySummary } from './hooks/useDailySummary'
 import { SystemScreen } from './screens/SystemScreen'
 import { SyncScreen } from './screens/SyncScreen'
 import { TodayScreen } from './screens/TodayScreen'
-import { APP_NAME, APP_SUBTITLE, GAS_EXEC_URL } from './config'
+import { APP_NAME, APP_SUBTITLE, LEGACY_CONTACT_BOOK_URL } from './config'
 import type { TabId } from './types'
 
 export default function App() {
@@ -15,6 +15,7 @@ export default function App() {
     status,
     errorMessage,
     lastSyncAt,
+    refreshing,
     refresh,
     noticeCount,
     subjectCount,
@@ -52,6 +53,7 @@ export default function App() {
             lastSyncAt={lastSyncAt}
             noticeCount={noticeCount}
             subjectCount={subjectCount}
+            refreshing={refreshing}
             onRefresh={() => {
               void refresh()
             }}
@@ -63,7 +65,7 @@ export default function App() {
         active={tab}
         onChange={(next) => {
           if (next === 'system' && embedBlocked) {
-            window.open(GAS_EXEC_URL, '_blank', 'noopener,noreferrer')
+            window.open(LEGACY_CONTACT_BOOK_URL, '_blank', 'noopener,noreferrer')
           }
           setTab(next)
         }}

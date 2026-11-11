@@ -1,33 +1,25 @@
-# Apps Script JSON API 合併說明
+# 學校APP 後端（Apps Script）
 
-目標：讓 App 能用 HTTP 取得今日公佈欄，而不是只能開網頁。
+- 專案：https://script.google.com/home/projects/1NX2iocrNfbDB6jpRKdyiNEL3k3vGrT2wYAMXMM0qf4FY_zhluNG54Rt5/edit
+- 試算表：https://docs.google.com/spreadsheets/d/1DrEsw-pBQ0-bhmgpkkF_J5y7yhgu1dLJA_aO9an-pS8/edit
+- 主程式：`Code.gs` / `程式碼.gs`（內容相同，以 clasp 推送）
 
-## 合併步驟
+## API
 
-1. 開啟既有「線上家庭聯絡簿系統」的 Apps Script 編輯器。
-2. 找到現有的 `doGet(e)`。
-3. 在函式**最前面**加入：
+| action | 說明 |
+|--------|------|
+| `getDailySummary` | 今日事項＋成績科目（有 120 秒快取） |
+| `setup` | 建立工作表；若空白則寫入示範資料 |
+| `purgeCache` | 清除今日快取 |
+| `health` | 健康檢查 |
 
-```javascript
-var params = (e && e.parameter) || {};
-if (String(params.format || '').toLowerCase() === 'json') {
-  return handleJsonApi_(String(params.action || ''), params);
-}
+範例：
+
+`.../exec?action=getDailySummary`
+
+## 推送
+
+```bash
+clasp push --force
+clasp deploy -i AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg -d "school-app-fast-json-v1"
 ```
-
-4. 把 `JsonApi.gs` 裡的 `handleJsonApi_`、`jsonOutput_` 貼進專案（可同檔或新檔）。
-5. 確認專案裡已有 `getDailySummary()`（你現有系統已在用）。
-6. **部署 → 新版本**（網址可維持不變）。
-
-## 測試
-
-瀏覽器開啟：
-
-`你的exec網址?format=json&action=getDailySummary`
-
-應看到 JSON，而不是 HTML 頁面。
-
-## 注意
-
-- 不要整份覆蓋原本的 `doGet`，以免家長／老師畫面消失。
-- `ContentService` JSON 無法設定自訂 CORS 標頭；若正式環境仍有 CORS 問題，可改由自己的後端轉發，或繼續用 App「系統」Tab 開原頁。

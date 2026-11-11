@@ -1,5 +1,9 @@
 import type { FetchStatus } from '../types'
-import { GAS_EXEC_URL } from '../config'
+import {
+  GAS_EXEC_URL,
+  GAS_PROJECT_EDIT_URL,
+  SPREADSHEET_URL,
+} from '../config'
 
 type Props = {
   status: FetchStatus
@@ -7,6 +11,7 @@ type Props = {
   lastSyncAt: string | null
   noticeCount: number
   subjectCount: number
+  refreshing?: boolean
   onRefresh: () => void
 }
 
@@ -23,15 +28,16 @@ export function SyncScreen({
   lastSyncAt,
   noticeCount,
   subjectCount,
+  refreshing = false,
   onRefresh,
 }: Props) {
-  const busy = status === 'loading'
+  const busy = status === 'loading' || refreshing
 
   return (
     <section className="screen sync-screen">
       <header className="page-header">
         <h1>資料更新</h1>
-        <p className="muted">從家庭聯絡簿伺服器同步今日公佈欄</p>
+        <p className="muted">從學校APP 後端（快取加速）同步今日公佈欄</p>
       </header>
 
       <div className="panel">
@@ -52,10 +58,10 @@ export function SyncScreen({
             <dt>狀態</dt>
             <dd>
               {busy && '更新中…'}
-              {status === 'ok' && '就緒'}
-              {status === 'idle' && '就緒'}
-              {status === 'needs_api' && '需部署 JSON API'}
-              {status === 'error' && '失敗'}
+              {!busy && status === 'ok' && '就緒'}
+              {!busy && status === 'idle' && '就緒'}
+              {!busy && status === 'needs_api' && '需部署 Web App'}
+              {!busy && status === 'error' && '失敗'}
             </dd>
           </div>
         </dl>
@@ -77,18 +83,27 @@ export function SyncScreen({
       </div>
 
       <div className="panel">
-        <h2>資料橋接說明</h2>
+        <h2>後端與資料庫</h2>
         <ol className="steps">
           <li>
-            開啟 Apps Script 專案，貼上專案內 <code>gas/JsonApi.gs</code> 片段（或合併進既有{' '}
-            <code>doGet</code>）。
+            後端專案「學校APP」：貼上 <code>gas/Code.gs</code> 後部署 Web App（執行身分：自己；存取：任何人）。
           </li>
-          <li>重新部署 Web App（執行身分與存取權限維持原設定）。</li>
-          <li>回到此頁按「立即更新」，今日事項與科目會顯示在「今日」。</li>
+          <li>
+            首次可開 <code>?action=setup</code> 建立「今日事項／成績科目／設定」工作表並寫入示範資料。
+          </li>
+          <li>把部署後的 <code>/exec</code> 網址填進 <code>VITE_GAS_EXEC_URL</code> 或 <code>src/config.ts</code>。</li>
         </ol>
-        <a className="btn ghost wide" href={GAS_EXEC_URL} target="_blank" rel="noreferrer">
-          開啟原始系統網址
-        </a>
+        <div className="row-actions">
+          <a className="btn ghost" href={GAS_PROJECT_EDIT_URL} target="_blank" rel="noreferrer">
+            開啟 Apps Script
+          </a>
+          <a className="btn ghost" href={SPREADSHEET_URL} target="_blank" rel="noreferrer">
+            開啟試算表
+          </a>
+          <a className="btn ghost" href={GAS_EXEC_URL} target="_blank" rel="noreferrer">
+            開啟目前 API 網址
+          </a>
+        </div>
       </div>
     </section>
   )

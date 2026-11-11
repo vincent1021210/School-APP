@@ -1,4 +1,4 @@
-import { GAS_EXEC_URL } from '../config'
+import { LEGACY_CONTACT_BOOK_URL, SPREADSHEET_URL } from '../config'
 
 type Props = {
   embedBlocked: boolean
@@ -10,13 +10,23 @@ export function SystemScreen({ embedBlocked, onEmbedError }: Props) {
     <section className="screen system-screen">
       <header className="page-header compact">
         <h1>完整系統</h1>
-        <p className="muted">家長／老師登入與既有功能都在原系統內</p>
+        <p className="muted">舊版家庭聯絡簿網頁；資料庫可直接開試算表維護</p>
       </header>
 
       <div className="panel">
-        <a className="btn primary wide" href={GAS_EXEC_URL} target="_blank" rel="noreferrer">
-          在新分頁開啟原系統
-        </a>
+        <div className="row-actions">
+          <a
+            className="btn primary"
+            href={LEGACY_CONTACT_BOOK_URL}
+            target="_blank"
+            rel="noreferrer"
+          >
+            開啟舊版系統
+          </a>
+          <a className="btn ghost" href={SPREADSHEET_URL} target="_blank" rel="noreferrer">
+            開啟試算表資料庫
+          </a>
+        </div>
       </div>
 
       {embedBlocked ? (
@@ -28,11 +38,11 @@ export function SystemScreen({ embedBlocked, onEmbedError }: Props) {
           <iframe
             title="線上家庭聯絡簿系統"
             className="webview-frame"
-            src={GAS_EXEC_URL}
+            src={LEGACY_CONTACT_BOOK_URL}
             onError={onEmbedError}
           />
           <p className="iframe-fallback">
-            若內嵌區空白，請改用上方「在新分頁開啟原系統」。
+            若內嵌區空白，請改用上方「開啟舊版系統」。
           </p>
         </div>
       )}
