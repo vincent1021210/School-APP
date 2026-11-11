@@ -11,4 +11,4 @@ export type DailySummary = {
 
 export type FetchStatus = 'idle' | 'loading' | 'ok' | 'error' | 'needs_api'
 
-export type TabId = 'today' | 'system' | 'sync'
+export type TabId = 'today' | 'sync'

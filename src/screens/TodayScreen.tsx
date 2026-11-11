@@ -4,7 +4,6 @@ type Props = {
   summary: DailySummary | null
   status: FetchStatus
   errorMessage: string | null
-  onOpenSystem: () => void
   onGoSync: () => void
 }
 
@@ -22,7 +21,6 @@ export function TodayScreen({
   summary,
   status,
   errorMessage,
-  onOpenSystem,
   onGoSync,
 }: Props) {
   const notices = summary?.notices ?? []
@@ -45,11 +43,8 @@ export function TodayScreen({
 
       {status === 'needs_api' && (
         <div className="panel warn-panel" role="status">
-          <p>尚未啟用 JSON 資料橋。可先開啟完整系統查看，或到「更新」依說明部署 API。</p>
+          <p>尚未啟用 JSON 資料橋。請到「更新」依說明部署 API。</p>
           <div className="row-actions">
-            <button type="button" className="btn primary" onClick={onOpenSystem}>
-              開啟完整系統
-            </button>
             <button type="button" className="btn ghost" onClick={onGoSync}>
               查看更新說明
             </button>

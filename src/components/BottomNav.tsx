@@ -2,7 +2,6 @@ import type { TabId } from '../types'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'today', label: '今日' },
-  { id: 'system', label: '系統' },
   { id: 'sync', label: '更新' },
 ]
 
