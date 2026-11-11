@@ -5,6 +5,8 @@ const GAS_DEPLOY_ID =
   'AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg'
 
 export default defineConfig({
+  // GitHub Pages 專案站：https://vincent1021210.github.io/School-APP/
+  base: '/School-APP/',
   plugins: [react()],
   server: {
     proxy: {

@@ -22,6 +22,18 @@
 - `成績科目`：日期、科目
 - `設定`：班級名稱等
 
+## 網站
+
+https://vincent1021210.github.io/School-APP/
+
+GitHub Pages 需部署 **建置後的 `dist`**（不是原始碼）。推上 `main` 後由 Actions 自動部署；也可手動：
+
+```bash
+npm run deploy:pages
+```
+
+Repo Settings → Pages → Source 請選 **GitHub Actions**。
+
 ## 開發
 
 ```bash
