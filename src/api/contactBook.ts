@@ -14,23 +14,6 @@ export class ContactBookApiError extends Error {
   }
 }
 
-/** JSON API（需在 GAS 部署 JsonApi.gs 片段後才可用） */
-function jsonEndpoint(action: string): string {
-  const params = new URLSearchParams({
-    format: 'json',
-    action,
-  })
-
-  // 開發環境走 Vite proxy，避免瀏覽器 CORS
-  if (import.meta.env.DEV) {
-    return `/api/gas?${params.toString()}`
-  }
-
-  const url = new URL(GAS_EXEC_URL)
-  params.forEach((value, key) => url.searchParams.set(key, value))
-  return url.toString()
-}
-
 function normalizeSummary(raw: unknown): DailySummary {
   if (!raw || typeof raw !== 'object') {
     throw new ContactBookApiError('回傳格式無法辨識', 'parse')
@@ -103,14 +86,14 @@ function saveCache(summary: DailySummary): void {
   localStorage.setItem(STORAGE_META_KEY, stamp)
 }
 
-function fetchJsonp(url: string): Promise<unknown> {
+function fetchJsonp(url: string, timeoutMs = 20000): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const callback = `schoolAppCb_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
     const script = document.createElement('script')
     const timer = window.setTimeout(() => {
       cleanup()
       reject(new ContactBookApiError('同步逾時', 'network'))
-    }, 20000)
+    }, timeoutMs)
 
     const cleanup = () => {
       window.clearTimeout(timer)
@@ -137,11 +120,21 @@ function fetchJsonp(url: string): Promise<unknown> {
  * 開發：Vite proxy + fetch
  * 正式站：JSONP（Apps Script 無法設 CORS）
  */
-async function fetchGasAction(action: string): Promise<unknown> {
+async function fetchGasAction(
+  action: string,
+  extraParams?: Record<string, string>,
+  timeoutMs = 20000,
+): Promise<unknown> {
+  const params = new URLSearchParams({
+    format: 'json',
+    action,
+    ...(extraParams || {}),
+  })
+
   if (import.meta.env.DEV) {
     let response: Response
     try {
-      response = await fetch(jsonEndpoint(action), {
+      response = await fetch(`/api/gas?${params.toString()}`, {
         method: 'GET',
         headers: { Accept: 'application/json, text/plain, */*' },
         redirect: 'follow',
@@ -176,7 +169,9 @@ async function fetchGasAction(action: string): Promise<unknown> {
     }
   }
 
-  return fetchJsonp(jsonEndpoint(action))
+  const url = new URL(GAS_EXEC_URL)
+  params.forEach((value, key) => url.searchParams.set(key, value))
+  return fetchJsonp(url.toString(), timeoutMs)
 }
 
 export async function fetchDailySummary(): Promise<DailySummary> {
@@ -229,12 +224,26 @@ function parseSyncResult(parsed: unknown, fallbackError: string): LegacySyncResu
 
 /** 老師用：觸發後端從舊版放學公佈欄同步今日資料 */
 export async function syncFromLegacyBoard(): Promise<LegacySyncResult> {
-  return parseSyncResult(await fetchGasAction('syncFromLegacy'), '從公佈欄同步失敗')
+  return parseSyncResult(
+    await fetchGasAction('syncFromLegacy', undefined, 45000),
+    '從公佈欄同步失敗',
+  )
 }
 
-/** 確保「當天」有資料：先同步舊版，必要時把最近一日滾到今天 */
-export async function ensureTodayReady(): Promise<LegacySyncResult> {
-  return parseSyncResult(await fetchGasAction('ensureToday'), '準備今日資料失敗')
+/**
+ * 確保「當天」有資料。
+ * force=false：今天已有事項則快速返回（進 App 用）
+ * force=true：強制再同步舊版（手動／排程用）
+ */
+export async function ensureTodayReady(force = false): Promise<LegacySyncResult> {
+  return parseSyncResult(
+    await fetchGasAction(
+      'ensureToday',
+      force ? { force: '1' } : undefined,
+      force ? 45000 : 25000,
+    ),
+    '準備今日資料失敗',
+  )
 }
 
 export { GAS_EXEC_URL }

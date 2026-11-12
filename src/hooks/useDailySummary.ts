@@ -70,7 +70,7 @@ export function useDailySummary(enabled = true) {
     setSyncingLegacy(true)
     setErrorMessage(null)
     try {
-      const result = await ensureTodayReady()
+      const result = await ensureTodayReady(true)
       if (result.summary) {
         setSummary(result.summary)
         setLastSyncAt(result.summary.updatedAt ?? new Date().toISOString())
@@ -116,7 +116,7 @@ export function useDailySummary(enabled = true) {
     ;(async () => {
       // 每天進 App：先確保「當天」列存在，再拉摘要（避免跨日空白／卡舊快取）
       try {
-        const ensured = await ensureTodayReady()
+        const ensured = await ensureTodayReady(false)
         if (cancelled) return
         if (ensured.summary) {
           setSummary(ensured.summary)

@@ -28,3 +28,6 @@ dist-ssr
 # clasp
 .clasprc.json
 gas/Code.gs.bak
+# 與 Code.gs 重複；勿同時進版控／clasp
+gas/程式碼.gs
+tmp_*.py

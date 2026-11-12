@@ -14,7 +14,12 @@ export default defineConfig({
         target: 'https://script.google.com',
         changeOrigin: true,
         secure: true,
-        rewrite: () => `/macros/s/${GAS_DEPLOY_ID}/exec`,
+        // 保留 ?action=... 查詢字串
+        rewrite: (path) => {
+          const qIndex = path.indexOf('?')
+          const qs = qIndex >= 0 ? path.slice(qIndex) : ''
+          return `/macros/s/${GAS_DEPLOY_ID}/exec${qs}`
+        },
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
             proxyReq.setHeader('Accept', 'application/json, text/plain, */*')

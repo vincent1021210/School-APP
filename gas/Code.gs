@@ -19,7 +19,7 @@ var SHEET_META = '設定';
 /** 舊版放學大螢幕 Web App（來源） */
 var LEGACY_EXEC_URL =
   'https://script.google.com/macros/s/AKfycbwBE0IVr9JuF92lpHMTUQiTgIpjxBYZWidAXHEfICwumlHggm31kfbD3Y3_mlznVuES/exec';
-var DAILY_SYNC_HANDLER = 'ensureTodayReady';
+var DAILY_SYNC_HANDLER = 'ensureTodayReadyForced';
 
 function doGet(e) {
   ensureSchema_();
@@ -64,7 +64,10 @@ function handleApi_(action, params) {
       return json_(syncFromLegacyBoard(), callback);
     }
     if (action === 'ensureToday' || action === 'ensureTodayReady') {
-      return json_(ensureTodayReady(), callback);
+      var forceSync =
+        String(params.force || '') === '1' ||
+        String(params.force || '').toLowerCase() === 'true';
+      return json_(ensureTodayReady(forceSync), callback);
     }
     if (action === 'installDailySyncTrigger') {
       return json_(installDailySyncTrigger(), callback);
@@ -359,15 +362,35 @@ function saveTodaySubjects(subjects) {
   return getDailySummaryFast_();
 }
 
+/** 時間觸發器／排程專用：強制再同步舊版 */
+function ensureTodayReadyForced() {
+  return ensureTodayReady(true);
+}
+
 /**
  * 每日確保「當天」有可顯示資料：
- * 1) 先嘗試從舊版公佈欄同步
- * 2) 若今天仍無事項，把最近一日內容滾到今天（避免跨日變空白）
+ * 1) 今天已有事項且未 force：直接回傳（進 App 快速路徑）
+ * 2) force 或今天空白：先嘗試從舊版公佈欄同步
+ * 3) 若今天仍無事項：把最近一日內容滾到今天（避免跨日變空白）
  */
-function ensureTodayReady() {
+function ensureTodayReady(forceSync) {
   ensureSchema_();
   var tz = Session.getScriptTimeZone();
   var todayKey = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd');
+  var existing = getDailySummaryFast_();
+
+  if (!forceSync && existing.notices.length > 0) {
+    return {
+      ok: true,
+      source: 'today_ready',
+      message: '',
+      dateLabel: todayKey,
+      noticeCount: existing.notices.length,
+      subjectCount: existing.subjects.length,
+      summary: existing,
+      rolledForward: false,
+    };
+  }
 
   var syncResult = syncFromLegacyBoard();
   var summary = getDailySummaryFast_();

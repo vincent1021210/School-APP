@@ -17,14 +17,10 @@ export function useAuth() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    let cancelled = false
     const token = loadStoredToken()
-    if (!token) {
-      setStatus('anonymous')
-      return
-    }
+    if (!token) return
 
-    setStatus('checking')
+    let cancelled = false
     void restorePatsSession(token)
       .then((restored) => {
         if (cancelled) return

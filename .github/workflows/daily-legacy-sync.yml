@@ -17,8 +17,8 @@ jobs:
         run: |
           set -euo pipefail
           BASE='https://script.google.com/macros/s/AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg/exec'
-          echo "Calling ensureToday..."
-          curl -fsSL --max-time 90 "${BASE}?action=ensureToday" | tee sync-result.json
+          echo "Calling ensureToday (force sync)..."
+          curl -fsSL --max-time 90 "${BASE}?action=ensureToday&force=1" | tee sync-result.json
           echo
           echo "Verifying getDailySummary..."
           curl -fsSL --max-time 60 "${BASE}?action=getDailySummary" | tee summary.json
