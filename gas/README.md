@@ -10,7 +10,8 @@
 |--------|------|
 | `getDailySummary` | 今日事項＋成績科目（有 120 秒快取） |
 | `syncFromLegacy` | 從舊版放學公佈欄同步今日資料並覆寫試算表 |
-| `installDailySyncTrigger` | 安裝每日 16:00（Asia/Taipei）自動同步觸發器 |
+| `ensureToday` | 確保當天有資料（先同步舊版；仍空則把最近一日滾到今天） |
+| `installDailySyncTrigger` | 安裝每日自動 `ensureTodayReady` 觸發器 |
 | `setup` | 建立工作表；若空白則寫入示範資料 |
 | `purgeCache` | 清除今日快取 |
 | `health` | 健康檢查 |

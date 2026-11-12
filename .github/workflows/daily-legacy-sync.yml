@@ -1,21 +1,24 @@
-name: Daily legacy board sync
+name: Daily today contact-book sync
 
 on:
   schedule:
-    # 每天 08:00 UTC = 台北 16:00
-    - cron: '0 8 * * *'
+    # 台北 07:00 / 12:00 / 16:00 / 18:00 → 確保「當天」有資料
+    - cron: '0 23 * * *' # 07:00 Taipei (前一天 23:00 UTC)
+    - cron: '0 4 * * *'  # 12:00 Taipei
+    - cron: '0 8 * * *'  # 16:00 Taipei
+    - cron: '0 10 * * *' # 18:00 Taipei
   workflow_dispatch:
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Sync from legacy dismissal board
+      - name: Ensure today's contact-book rows
         run: |
           set -euo pipefail
           BASE='https://script.google.com/macros/s/AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg/exec'
-          echo "Calling syncFromLegacy..."
-          curl -fsSL --max-time 60 "${BASE}?action=syncFromLegacy" | tee sync-result.json
+          echo "Calling ensureToday..."
+          curl -fsSL --max-time 90 "${BASE}?action=ensureToday" | tee sync-result.json
           echo
           echo "Verifying getDailySummary..."
           curl -fsSL --max-time 60 "${BASE}?action=getDailySummary" | tee summary.json
@@ -25,5 +28,12 @@ jobs:
           summary = json.load(open('summary.json', encoding='utf-8'))
           if sync.get('error'):
               raise SystemExit(f"sync error: {sync}")
-          print('source=', sync.get('source'), 'notices=', sync.get('noticeCount'), 'date=', summary.get('dateLabel'))
+          print(
+              'source=', sync.get('source'),
+              'rolled=', sync.get('rolledForward'),
+              'notices=', sync.get('noticeCount'),
+              'date=', summary.get('dateLabel'),
+          )
+          if summary.get('dateLabel') and sync.get('dateLabel') and summary['dateLabel'] != sync['dateLabel']:
+              raise SystemExit('date mismatch between ensureToday and summary')
           PY

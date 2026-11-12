@@ -19,7 +19,7 @@ var SHEET_META = '設定';
 /** 舊版放學大螢幕 Web App（來源） */
 var LEGACY_EXEC_URL =
   'https://script.google.com/macros/s/AKfycbwBE0IVr9JuF92lpHMTUQiTgIpjxBYZWidAXHEfICwumlHggm31kfbD3Y3_mlznVuES/exec';
-var DAILY_SYNC_HANDLER = 'syncFromLegacyBoard';
+var DAILY_SYNC_HANDLER = 'ensureTodayReady';
 
 function doGet(e) {
   ensureSchema_();
@@ -62,6 +62,9 @@ function handleApi_(action, params) {
     }
     if (action === 'syncFromLegacy' || action === 'syncFromLegacyBoard') {
       return json_(syncFromLegacyBoard(), callback);
+    }
+    if (action === 'ensureToday' || action === 'ensureTodayReady') {
+      return json_(ensureTodayReady(), callback);
     }
     if (action === 'installDailySyncTrigger') {
       return json_(installDailySyncTrigger(), callback);
@@ -357,6 +360,48 @@ function saveTodaySubjects(subjects) {
 }
 
 /**
+ * 每日確保「當天」有可顯示資料：
+ * 1) 先嘗試從舊版公佈欄同步
+ * 2) 若今天仍無事項，把最近一日內容滾到今天（避免跨日變空白）
+ */
+function ensureTodayReady() {
+  ensureSchema_();
+  var tz = Session.getScriptTimeZone();
+  var todayKey = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd');
+
+  var syncResult = syncFromLegacyBoard();
+  var summary = getDailySummaryFast_();
+  if (summary.notices.length > 0) {
+    return {
+      ok: true,
+      source: syncResult.source || 'ok',
+      message: syncResult.message || '',
+      dateLabel: todayKey,
+      noticeCount: summary.notices.length,
+      subjectCount: summary.subjects.length,
+      summary: summary,
+      rolledForward: false,
+    };
+  }
+
+  var rolled = rollForwardLatestToToday_();
+  summary = getDailySummaryFast_();
+  return {
+    ok: true,
+    source: rolled.didRoll ? 'rolled_forward' : syncResult.source || 'empty',
+    message: rolled.didRoll
+      ? '今天尚無新資料，已將 ' + rolled.fromDate + ' 的事項滾到今天'
+      : syncResult.message || '今天尚無聯絡事項',
+    dateLabel: todayKey,
+    noticeCount: summary.notices.length,
+    subjectCount: summary.subjects.length,
+    summary: summary,
+    rolledForward: !!rolled.didRoll,
+    fromDate: rolled.fromDate || '',
+  };
+}
+
+/**
  * 從舊版放學公佈欄同步「今天」的事項／科目到學校APP 試算表。
  * 優先：舊版 JSON（需在舊版合併 JsonApi.gs）
  * 其次：設定中的舊版試算表 ID 直接讀表
@@ -400,6 +445,38 @@ function syncFromLegacyBoard() {
     subjectCount: summary.subjects.length,
     summary: summary,
   };
+}
+
+/** 把最近一日（早於今天）的事項／科目複製成今天的列 */
+function rollForwardLatestToToday_() {
+  var ss = getSpreadsheet_();
+  var tz = Session.getScriptTimeZone();
+  var todayKey = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd');
+  var latest = findLatestDateBefore_(ss, todayKey, tz);
+  if (!latest) return { didRoll: false, fromDate: '' };
+
+  var notices = readNoticesForDate_(ss, latest).map(function (n) {
+    return n.content;
+  });
+  var subjects = readSubjectsForDate_(ss, latest);
+  if (!notices.length && !subjects.length) return { didRoll: false, fromDate: latest };
+
+  saveTodayNotices(notices);
+  saveTodaySubjects(subjects);
+  return { didRoll: true, fromDate: latest };
+}
+
+function findLatestDateBefore_(ss, todayKey, tz) {
+  var sheet = ss.getSheetByName(SHEET_NOTICES);
+  if (!sheet || sheet.getLastRow() < 2) return '';
+  var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getDisplayValues();
+  var best = '';
+  for (var i = 0; i < values.length; i++) {
+    var key = normalizeDateKey_(String(values[i][0] || ''), tz);
+    if (!key || key >= todayKey) continue;
+    if (key > best) best = key;
+  }
+  return best;
 }
 
 function fetchLegacyDailySummary_() {

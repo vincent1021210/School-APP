@@ -65,11 +65,29 @@ function normalizeSummary(raw: unknown): DailySummary {
   }
 }
 
+/** 台北日曆日 yyyy/MM/dd（與 GAS Asia/Taipei 對齊） */
+export function localTodayKey(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+    .format(new Date())
+    .replace(/-/g, '/')
+}
+
 export function loadCachedSummary(): DailySummary | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    return normalizeSummary(JSON.parse(raw))
+    const summary = normalizeSummary(JSON.parse(raw))
+    // 跨日後丟棄舊快取，避免畫面卡在昨天
+    if (summary.dateLabel && summary.dateLabel !== localTodayKey()) {
+      localStorage.removeItem(STORAGE_KEY)
+      return null
+    }
+    return summary
   } catch {
     return null
   }
@@ -177,16 +195,14 @@ export type LegacySyncResult = {
   summary?: DailySummary
 }
 
-/** 老師用：觸發後端從舊版放學公佈欄同步今日資料 */
-export async function syncFromLegacyBoard(): Promise<LegacySyncResult> {
-  const parsed = await fetchGasAction('syncFromLegacy')
+function parseSyncResult(parsed: unknown, fallbackError: string): LegacySyncResult {
   if (!parsed || typeof parsed !== 'object') {
     throw new ContactBookApiError('同步回傳格式無法辨識', 'parse')
   }
   const data = parsed as Record<string, unknown>
   if (data.error) {
     throw new ContactBookApiError(
-      typeof data.message === 'string' ? data.message : '從公佈欄同步失敗',
+      typeof data.message === 'string' ? data.message : fallbackError,
       'http',
     )
   }
@@ -209,6 +225,16 @@ export async function syncFromLegacyBoard(): Promise<LegacySyncResult> {
         : summary?.subjects.length,
     summary,
   }
+}
+
+/** 老師用：觸發後端從舊版放學公佈欄同步今日資料 */
+export async function syncFromLegacyBoard(): Promise<LegacySyncResult> {
+  return parseSyncResult(await fetchGasAction('syncFromLegacy'), '從公佈欄同步失敗')
+}
+
+/** 確保「當天」有資料：先同步舊版，必要時把最近一日滾到今天 */
+export async function ensureTodayReady(): Promise<LegacySyncResult> {
+  return parseSyncResult(await fetchGasAction('ensureToday'), '準備今日資料失敗')
 }
 
 export { GAS_EXEC_URL }

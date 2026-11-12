@@ -92,7 +92,7 @@ export function SyncScreen({
             disabled={busy}
             style={{ marginTop: '0.75rem' }}
           >
-            {syncingLegacy ? '同步中…' : '從放學公佈欄同步'}
+            {syncingLegacy ? '同步中…' : '同步／準備今日聯絡簿'}
           </button>
         )}
 

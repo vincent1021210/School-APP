@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   ContactBookApiError,
+  ensureTodayReady,
   fetchDailySummary,
   loadCachedSummary,
   loadLastSyncAt,
@@ -69,7 +70,7 @@ export function useDailySummary(enabled = true) {
     setSyncingLegacy(true)
     setErrorMessage(null)
     try {
-      const result = await syncFromLegacyBoard()
+      const result = await ensureTodayReady()
       if (result.summary) {
         setSummary(result.summary)
         setLastSyncAt(result.summary.updatedAt ?? new Date().toISOString())
@@ -79,19 +80,31 @@ export function useDailySummary(enabled = true) {
         setLastSyncAt(data.updatedAt ?? new Date().toISOString())
       }
       setStatus('ok')
-      // 僅在無法讀取舊版／讀表失敗時提示（成功同步不佔用錯誤區）
       if (
         result.source === 'unreachable' ||
         result.source === 'empty' ||
-        result.source === 'legacy_sheet_error'
+        result.source === 'legacy_sheet_error' ||
+        result.source === 'rolled_forward'
       ) {
-        setErrorMessage(result.message ?? '舊版今日尚無資料可同步')
+        setErrorMessage(result.message ?? null)
       } else {
         setErrorMessage(null)
       }
     } catch (err) {
+      // 後備：至少再試舊版同步
+      try {
+        const fallback = await syncFromLegacyBoard()
+        if (fallback.summary) {
+          setSummary(fallback.summary)
+          setLastSyncAt(fallback.summary.updatedAt ?? new Date().toISOString())
+          setStatus('ok')
+          return
+        }
+      } catch {
+        /* fall through */
+      }
       setStatus('error')
-      setErrorMessage(err instanceof Error ? err.message : '從公佈欄同步失敗')
+      setErrorMessage(err instanceof Error ? err.message : '準備今日資料失敗')
     } finally {
       setSyncingLegacy(false)
     }
@@ -99,7 +112,25 @@ export function useDailySummary(enabled = true) {
 
   useEffect(() => {
     if (!enabled) return
-    void refresh({ silent: true })
+    let cancelled = false
+    ;(async () => {
+      // 每天進 App：先確保「當天」列存在，再拉摘要（避免跨日空白／卡舊快取）
+      try {
+        const ensured = await ensureTodayReady()
+        if (cancelled) return
+        if (ensured.summary) {
+          setSummary(ensured.summary)
+          setLastSyncAt(ensured.summary.updatedAt ?? new Date().toISOString())
+          setStatus('ok')
+        }
+      } catch {
+        /* 後續 refresh 會再試 */
+      }
+      if (!cancelled) await refresh({ silent: true })
+    })()
+    return () => {
+      cancelled = true
+    }
     // 登入後才開始拉取；enabled 由 false→true 時再跑
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled])
