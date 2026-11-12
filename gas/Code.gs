@@ -361,12 +361,28 @@ function saveTodaySubjects(subjects) {
  * 優先：舊版 JSON（需在舊版合併 JsonApi.gs）
  * 其次：設定中的舊版試算表 ID 直接讀表
  * 若舊版當日無資料：寫入空陣列（不回填昨天）
+ * 若舊版介面尚無法讀取：保留現有今日列，不清空
  */
 function syncFromLegacyBoard() {
   ensureSchema_();
   var tz = Session.getScriptTimeZone();
   var todayKey = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd');
   var fetched = fetchLegacyDailySummary_();
+
+  if (fetched.unreachable) {
+    var kept = getDailySummaryFast_();
+    return {
+      ok: true,
+      source: fetched.source,
+      message: fetched.message || '',
+      dateLabel: todayKey,
+      noticeCount: kept.notices.length,
+      subjectCount: kept.subjects.length,
+      summary: kept,
+      skippedWrite: true,
+    };
+  }
+
   var notices = fetched.notices || [];
   var subjects = fetched.subjects || [];
 
@@ -396,9 +412,10 @@ function fetchLegacyDailySummary_() {
   return {
     notices: [],
     subjects: [],
-    source: 'empty',
+    unreachable: true,
+    source: 'unreachable',
     message:
-      '舊版尚無今日 JSON／試算表資料（若舊版未合併 JsonApi.gs，請在設定填「舊版試算表ID」或於舊版啟用 format=json）',
+      '舊版 JSON／試算表尚無法讀取，已保留現有今日資料（請合併 JsonApi.gs 或在設定填「舊版試算表ID」）',
   };
 }
 

@@ -74,8 +74,12 @@ export function useDailySummary() {
         setLastSyncAt(data.updatedAt ?? new Date().toISOString())
       }
       setStatus('ok')
-      // 僅在未能從舊版取到資料時提示（成功同步不佔用錯誤區）
-      if (result.source === 'empty' || result.source === 'legacy_sheet_error') {
+      // 僅在無法讀取舊版／讀表失敗時提示（成功同步不佔用錯誤區）
+      if (
+        result.source === 'unreachable' ||
+        result.source === 'empty' ||
+        result.source === 'legacy_sheet_error'
+      ) {
         setErrorMessage(result.message ?? '舊版今日尚無資料可同步')
       } else {
         setErrorMessage(null)
