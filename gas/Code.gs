@@ -8,6 +8,7 @@
  * 3. 寫入後立刻清快取，保證下次讀到新資料
  *
  * Web App：doGet(?action=getDailySummary) → JSON
+ * 每日同步：syncFromLegacyBoard（時間觸發器）
  */
 
 var SPREADSHEET_ID = '1DrEsw-pBQ0-bhmgpkkF_J5y7yhgu1dLJA_aO9an-pS8';
@@ -15,6 +16,10 @@ var CACHE_TTL_SEC = 120;
 var SHEET_NOTICES = '今日事項';
 var SHEET_SUBJECTS = '成績科目';
 var SHEET_META = '設定';
+/** 舊版放學大螢幕 Web App（來源） */
+var LEGACY_EXEC_URL =
+  'https://script.google.com/macros/s/AKfycbwBE0IVr9JuF92lpHMTUQiTgIpjxBYZWidAXHEfICwumlHggm31kfbD3Y3_mlznVuES/exec';
+var DAILY_SYNC_HANDLER = 'syncFromLegacyBoard';
 
 function doGet(e) {
   ensureSchema_();
@@ -37,6 +42,7 @@ function handleApi_(action, params) {
           spreadsheetId: SPREADSHEET_ID,
           timezone: Session.getScriptTimeZone(),
           now: new Date().toISOString(),
+          legacyUrl: getLegacyExecUrl_(),
         },
         callback,
       );
@@ -53,6 +59,12 @@ function handleApi_(action, params) {
     }
     if (action === 'importAssignedHomework') {
       return json_(importAssignedHomework(), callback);
+    }
+    if (action === 'syncFromLegacy' || action === 'syncFromLegacyBoard') {
+      return json_(syncFromLegacyBoard(), callback);
+    }
+    if (action === 'installDailySyncTrigger') {
+      return json_(installDailySyncTrigger(), callback);
     }
     return json_({ error: 'unknown_action', action: action }, callback);
   } catch (err) {
@@ -183,11 +195,16 @@ function ensureSchema_() {
     meta = ss.insertSheet(SHEET_META);
   }
   if (meta.getLastRow() === 0) {
-    meta.getRange(1, 1, 3, 2).setValues([
+    meta.getRange(1, 1, 5, 2).setValues([
       ['鍵', '值'],
       ['班級名稱', '班級家庭聯絡簿'],
       ['快取秒數', String(CACHE_TTL_SEC)],
+      ['舊版公佈欄網址', LEGACY_EXEC_URL],
+      ['舊版試算表ID', ''],
     ]);
+  } else {
+    ensureMetaKey_(meta, '舊版公佈欄網址', LEGACY_EXEC_URL);
+    ensureMetaKey_(meta, '舊版試算表ID', '');
   }
 
   // 移除預設空白「工作表1」若已有業務表且它是空的
@@ -195,6 +212,41 @@ function ensureSchema_() {
   if (defaultSheet && ss.getSheets().length > 1 && defaultSheet.getLastRow() === 0) {
     ss.deleteSheet(defaultSheet);
   }
+}
+
+function ensureMetaKey_(meta, key, defaultValue) {
+  var last = meta.getLastRow();
+  if (last < 2) {
+    meta.appendRow([key, defaultValue]);
+    return;
+  }
+  var values = meta.getRange(2, 1, last - 1, 2).getDisplayValues();
+  for (var i = 0; i < values.length; i++) {
+    if (String(values[i][0] || '').trim() === key) return;
+  }
+  meta.appendRow([key, defaultValue]);
+}
+
+function getMetaValue_(key, fallback) {
+  var ss = getSpreadsheet_();
+  var meta = ss.getSheetByName(SHEET_META);
+  if (!meta || meta.getLastRow() < 2) return fallback;
+  var values = meta.getRange(2, 1, meta.getLastRow() - 1, 2).getDisplayValues();
+  for (var i = 0; i < values.length; i++) {
+    if (String(values[i][0] || '').trim() === key) {
+      var v = String(values[i][1] || '').trim();
+      return v || fallback;
+    }
+  }
+  return fallback;
+}
+
+function getLegacyExecUrl_() {
+  return getMetaValue_('舊版公佈欄網址', LEGACY_EXEC_URL);
+}
+
+function getLegacySpreadsheetId_() {
+  return getMetaValue_('舊版試算表ID', '');
 }
 
 function seedDemoIfEmpty_() {
@@ -302,6 +354,244 @@ function saveTodaySubjects(subjects) {
   }
   invalidateDailyCache_();
   return getDailySummaryFast_();
+}
+
+/**
+ * 從舊版放學公佈欄同步「今天」的事項／科目到學校APP 試算表。
+ * 優先：舊版 JSON（需在舊版合併 JsonApi.gs）
+ * 其次：設定中的舊版試算表 ID 直接讀表
+ * 若舊版當日無資料：寫入空陣列（不回填昨天）
+ */
+function syncFromLegacyBoard() {
+  ensureSchema_();
+  var tz = Session.getScriptTimeZone();
+  var todayKey = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd');
+  var fetched = fetchLegacyDailySummary_();
+  var notices = fetched.notices || [];
+  var subjects = fetched.subjects || [];
+
+  // 覆寫今天列（即使為空也不回填昨天）
+  saveTodayNotices(notices);
+  saveTodaySubjects(subjects);
+
+  var summary = getDailySummaryFast_();
+  return {
+    ok: true,
+    source: fetched.source,
+    message: fetched.message || '',
+    dateLabel: todayKey,
+    noticeCount: summary.notices.length,
+    subjectCount: summary.subjects.length,
+    summary: summary,
+  };
+}
+
+function fetchLegacyDailySummary_() {
+  var jsonResult = fetchLegacyJsonSummary_();
+  if (jsonResult) return jsonResult;
+
+  var sheetResult = fetchLegacySheetSummary_();
+  if (sheetResult) return sheetResult;
+
+  return {
+    notices: [],
+    subjects: [],
+    source: 'empty',
+    message:
+      '舊版尚無今日 JSON／試算表資料（若舊版未合併 JsonApi.gs，請在設定填「舊版試算表ID」或於舊版啟用 format=json）',
+  };
+}
+
+function fetchLegacyJsonSummary_() {
+  var base = getLegacyExecUrl_();
+  var urls = [
+    base + (base.indexOf('?') >= 0 ? '&' : '?') + 'format=json&action=getDailySummary',
+    base + (base.indexOf('?') >= 0 ? '&' : '?') + 'action=getDailySummary&format=json',
+  ];
+
+  for (var u = 0; u < urls.length; u++) {
+    try {
+      var resp = UrlFetchApp.fetch(urls[u], {
+        muteHttpExceptions: true,
+        followRedirects: true,
+        headers: { Accept: 'application/json,text/plain,*/*' },
+      });
+      var code = resp.getResponseCode();
+      var text = String(resp.getContentText() || '').trim();
+      if (code < 200 || code >= 300) continue;
+      if (!text || text.charAt(0) === '<') continue;
+
+      var parsed = JSON.parse(text);
+      if (parsed && parsed.error) continue;
+      return {
+        notices: normalizeNoticeList_(parsed.notices),
+        subjects: normalizeSubjectList_(parsed.subjects),
+        source: 'legacy_json',
+        message: '已從舊版 JSON API 同步',
+      };
+    } catch (err) {
+      // try next url
+    }
+  }
+  return null;
+}
+
+/**
+ * 若設定了「舊版試算表ID」，直接讀舊版試算表今日列。
+ * 會嘗試常見工作表名稱與欄位配置。
+ */
+function fetchLegacySheetSummary_() {
+  var legacyId = getLegacySpreadsheetId_();
+  if (!legacyId) return null;
+
+  try {
+    var ss = SpreadsheetApp.openById(legacyId);
+  } catch (err) {
+    return {
+      notices: [],
+      subjects: [],
+      source: 'legacy_sheet_error',
+      message: '無法開啟舊版試算表：' + String(err && err.message ? err.message : err),
+    };
+  }
+
+  var tz = Session.getScriptTimeZone();
+  var todayKey = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd');
+  var notices = readLegacyNoticesFromSpreadsheet_(ss, todayKey, tz);
+  var subjects = readLegacySubjectsFromSpreadsheet_(ss, todayKey, tz);
+
+  return {
+    notices: notices,
+    subjects: subjects,
+    source: 'legacy_sheet',
+    message: '已從舊版試算表同步',
+  };
+}
+
+function readLegacyNoticesFromSpreadsheet_(ss, todayKey, tz) {
+  var candidateNames = ['今日事項', '聯絡事項', '事項', 'Notices', 'notice'];
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    var name = sheets[i].getName();
+    for (var c = 0; c < candidateNames.length; c++) {
+      if (name.indexOf(candidateNames[c]) >= 0 || name === candidateNames[c]) {
+        var rows = readDateContentPairs_(sheets[i], todayKey, tz);
+        if (rows.length) return rows.map(function (t) { return { content: t }; });
+      }
+    }
+  }
+  // 掃描所有表：找「日期+內容」兩欄
+  for (var j = 0; j < sheets.length; j++) {
+    var found = readDateContentPairs_(sheets[j], todayKey, tz);
+    if (found.length) {
+      return found.map(function (t) { return { content: t }; });
+    }
+  }
+  return [];
+}
+
+function readLegacySubjectsFromSpreadsheet_(ss, todayKey, tz) {
+  var candidateNames = ['成績科目', '科目', 'Subjects', 'subject'];
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    var name = sheets[i].getName();
+    for (var c = 0; c < candidateNames.length; c++) {
+      if (name.indexOf(candidateNames[c]) >= 0 || name === candidateNames[c]) {
+        return readDateContentPairs_(sheets[i], todayKey, tz);
+      }
+    }
+  }
+  return [];
+}
+
+function readDateContentPairs_(sheet, todayKey, tz) {
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  var last = sheet.getLastRow();
+  var lastCol = Math.min(sheet.getLastColumn(), 4);
+  if (lastCol < 2) return [];
+  var values = sheet.getRange(1, 1, last, lastCol).getDisplayValues();
+  var start = 0;
+  // 略過表頭
+  var h0 = String(values[0][0] || '');
+  var h1 = String(values[0][1] || '');
+  if (/日期|date/i.test(h0) || /內容|事項|科目|subject|content/i.test(h1)) {
+    start = 1;
+  }
+  var out = [];
+  for (var i = start; i < values.length; i++) {
+    var dateCell = String(values[i][0] || '').trim();
+    var content = String(values[i][1] || '').trim();
+    if (!content) continue;
+    if (normalizeDateKey_(dateCell, tz) === todayKey) {
+      out.push(content);
+    }
+  }
+  return out;
+}
+
+function normalizeNoticeList_(raw) {
+  var list = Array.isArray(raw) ? raw : [];
+  var out = [];
+  for (var i = 0; i < list.length; i++) {
+    var item = list[i];
+    if (typeof item === 'string') {
+      var t = item.trim();
+      if (t) out.push(t);
+    } else if (item && typeof item === 'object' && item.content != null) {
+      var c = String(item.content).trim();
+      if (c) out.push(c);
+    }
+  }
+  return out;
+}
+
+function normalizeSubjectList_(raw) {
+  var list = Array.isArray(raw) ? raw : [];
+  var out = [];
+  var seen = {};
+  for (var i = 0; i < list.length; i++) {
+    var s = String(list[i] == null ? '' : list[i]).trim();
+    if (!s || seen[s]) continue;
+    seen[s] = true;
+    out.push(s);
+  }
+  return out;
+}
+
+/**
+ * 安裝每日時間觸發器（台北時間約 16:00–17:00 區間執行一次）
+ * 可重複呼叫：會先清除同名 handler 的舊觸發器。
+ */
+function installDailySyncTrigger() {
+  removeDailySyncTriggers_();
+
+  // 每天在 16 點這個小時內觸發（Apps Script 以專案時區解讀）
+  ScriptApp.newTrigger(DAILY_SYNC_HANDLER)
+    .timeBased()
+    .atHour(16)
+    .everyDays(1)
+    .inTimezone('Asia/Taipei')
+    .create();
+
+  var triggers = ScriptApp.getProjectTriggers().filter(function (t) {
+    return t.getHandlerFunction() === DAILY_SYNC_HANDLER;
+  });
+
+  return {
+    ok: true,
+    message: '已安裝每日 16:00（Asia/Taipei）同步觸發器',
+    handler: DAILY_SYNC_HANDLER,
+    triggerCount: triggers.length,
+  };
+}
+
+function removeDailySyncTriggers_() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === DAILY_SYNC_HANDLER) {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
 }
 
 function json_(obj, callbackName) {

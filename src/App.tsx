@@ -14,7 +14,9 @@ export default function App() {
     errorMessage,
     lastSyncAt,
     refreshing,
+    syncingLegacy,
     refresh,
+    syncLegacy,
     noticeCount,
     subjectCount,
   } = useDailySummary()
@@ -43,8 +45,12 @@ export default function App() {
             noticeCount={noticeCount}
             subjectCount={subjectCount}
             refreshing={refreshing}
+            syncingLegacy={syncingLegacy}
             onRefresh={() => {
               void refresh()
+            }}
+            onSyncFromLegacy={() => {
+              void syncLegacy()
             }}
           />
         )}

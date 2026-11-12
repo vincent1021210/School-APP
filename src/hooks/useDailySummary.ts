@@ -4,6 +4,7 @@ import {
   fetchDailySummary,
   loadCachedSummary,
   loadLastSyncAt,
+  syncFromLegacyBoard,
 } from '../api/contactBook'
 import type { DailySummary, FetchStatus } from '../types'
 
@@ -18,6 +19,7 @@ export function useDailySummary() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => loadLastSyncAt())
   const [refreshing, setRefreshing] = useState(false)
+  const [syncingLegacy, setSyncingLegacy] = useState(false)
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = Boolean(opts?.silent) && Boolean(loadCachedSummary() || summary)
@@ -58,6 +60,34 @@ export function useDailySummary() {
     }
   }, [summary])
 
+  const syncLegacy = useCallback(async () => {
+    setSyncingLegacy(true)
+    setErrorMessage(null)
+    try {
+      const result = await syncFromLegacyBoard()
+      if (result.summary) {
+        setSummary(result.summary)
+        setLastSyncAt(result.summary.updatedAt ?? new Date().toISOString())
+      } else {
+        const data = await fetchDailySummary()
+        setSummary(data)
+        setLastSyncAt(data.updatedAt ?? new Date().toISOString())
+      }
+      setStatus('ok')
+      // 僅在未能從舊版取到資料時提示（成功同步不佔用錯誤區）
+      if (result.source === 'empty' || result.source === 'legacy_sheet_error') {
+        setErrorMessage(result.message ?? '舊版今日尚無資料可同步')
+      } else {
+        setErrorMessage(null)
+      }
+    } catch (err) {
+      setStatus('error')
+      setErrorMessage(err instanceof Error ? err.message : '從公佈欄同步失敗')
+    } finally {
+      setSyncingLegacy(false)
+    }
+  }, [])
+
   useEffect(() => {
     void refresh({ silent: true })
     // 只在掛載時跑一次
@@ -70,7 +100,9 @@ export function useDailySummary() {
     errorMessage,
     lastSyncAt,
     refreshing,
+    syncingLegacy,
     refresh: () => refresh({ silent: false }),
+    syncLegacy,
     noticeCount: summary?.notices.length ?? 0,
     subjectCount: summary?.subjects.length ?? 0,
   }

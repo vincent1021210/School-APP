@@ -24,3 +24,7 @@ export const APP_ROLE = 'dismissal_board' as const
 
 export const APP_NAME = '家庭聯絡簿'
 export const APP_SUBTITLE = '班級放學公佈欄'
+
+/** 舊版放學大螢幕（同步來源） */
+export const LEGACY_CONTACT_BOOK_URL =
+  'https://script.google.com/macros/s/AKfycbwBE0IVr9JuF92lpHMTUQiTgIpjxBYZWidAXHEfICwumlHggm31kfbD3Y3_mlznVuES/exec'

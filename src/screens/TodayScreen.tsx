@@ -65,7 +65,9 @@ export function TodayScreen({
         <h2>今日聯絡事項</h2>
         {notices.length === 0 ? (
           <p className="empty-copy">
-            {summary ? '今日尚無聯絡事項。' : '尚無快取資料。請到「更新」同步。'}
+            {summary
+              ? `今日尚無聯絡事項（已同步${summary.dateLabel ? ` · ${summary.dateLabel}` : ''}）。`
+              : '尚無快取資料。請到「更新」同步。'}
           </p>
         ) : (
           <ol className="notice-list">

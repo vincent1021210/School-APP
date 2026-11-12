@@ -1,0 +1,29 @@
+name: Daily legacy board sync
+
+on:
+  schedule:
+    # 每天 08:00 UTC = 台北 16:00
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync from legacy dismissal board
+        run: |
+          set -euo pipefail
+          BASE='https://script.google.com/macros/s/AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg/exec'
+          echo "Calling syncFromLegacy..."
+          curl -fsSL --max-time 60 "${BASE}?action=syncFromLegacy" | tee sync-result.json
+          echo
+          echo "Verifying getDailySummary..."
+          curl -fsSL --max-time 60 "${BASE}?action=getDailySummary" | tee summary.json
+          python3 - <<'PY'
+          import json
+          sync = json.load(open('sync-result.json', encoding='utf-8'))
+          summary = json.load(open('summary.json', encoding='utf-8'))
+          if sync.get('error'):
+              raise SystemExit(f"sync error: {sync}")
+          print('source=', sync.get('source'), 'notices=', sync.get('noticeCount'), 'date=', summary.get('dateLabel'))
+          PY

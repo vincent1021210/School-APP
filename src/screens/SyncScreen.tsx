@@ -7,7 +7,9 @@ type Props = {
   noticeCount: number
   subjectCount: number
   refreshing?: boolean
+  syncingLegacy?: boolean
   onRefresh: () => void
+  onSyncFromLegacy?: () => void
 }
 
 function formatStamp(iso: string | null): string {
@@ -24,9 +26,11 @@ export function SyncScreen({
   noticeCount,
   subjectCount,
   refreshing = false,
+  syncingLegacy = false,
   onRefresh,
+  onSyncFromLegacy,
 }: Props) {
-  const busy = status === 'loading' || refreshing
+  const busy = status === 'loading' || refreshing || syncingLegacy
 
   return (
     <section className="screen sync-screen">
@@ -52,7 +56,7 @@ export function SyncScreen({
           <div>
             <dt>狀態</dt>
             <dd>
-              {busy && '更新中…'}
+              {busy && (syncingLegacy ? '正在從公佈欄同步…' : '更新中…')}
               {!busy && status === 'ok' && '就緒'}
               {!busy && status === 'idle' && '就緒'}
               {!busy && status === 'needs_api' && '需部署 Web App'}
@@ -67,8 +71,20 @@ export function SyncScreen({
           onClick={onRefresh}
           disabled={busy}
         >
-          {busy ? '更新中…' : '立即更新'}
+          {refreshing || status === 'loading' ? '更新中…' : '立即更新'}
         </button>
+
+        {onSyncFromLegacy && (
+          <button
+            type="button"
+            className="btn ghost wide"
+            onClick={onSyncFromLegacy}
+            disabled={busy}
+            style={{ marginTop: '0.75rem' }}
+          >
+            {syncingLegacy ? '同步中…' : '從放學公佈欄同步'}
+          </button>
+        )}
 
         {errorMessage && (
           <p className="inline-error" role="alert">

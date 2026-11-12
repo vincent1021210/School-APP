@@ -119,13 +119,11 @@ function fetchJsonp(url: string): Promise<unknown> {
  * 開發：Vite proxy + fetch
  * 正式站：JSONP（Apps Script 無法設 CORS）
  */
-export async function fetchDailySummary(): Promise<DailySummary> {
-  let parsed: unknown
-
+async function fetchGasAction(action: string): Promise<unknown> {
   if (import.meta.env.DEV) {
     let response: Response
     try {
-      response = await fetch(jsonEndpoint('getDailySummary'), {
+      response = await fetch(jsonEndpoint(action), {
         method: 'GET',
         headers: { Accept: 'application/json, text/plain, */*' },
         redirect: 'follow',
@@ -154,17 +152,63 @@ export async function fetchDailySummary(): Promise<DailySummary> {
     }
 
     try {
-      parsed = JSON.parse(text)
+      return JSON.parse(text)
     } catch {
       throw new ContactBookApiError('JSON 解析失敗', 'parse')
     }
-  } else {
-    parsed = await fetchJsonp(jsonEndpoint('getDailySummary'))
   }
 
+  return fetchJsonp(jsonEndpoint(action))
+}
+
+export async function fetchDailySummary(): Promise<DailySummary> {
+  const parsed = await fetchGasAction('getDailySummary')
   const summary = normalizeSummary(parsed)
   saveCache(summary)
   return summary
+}
+
+export type LegacySyncResult = {
+  ok: boolean
+  source?: string
+  message?: string
+  noticeCount?: number
+  subjectCount?: number
+  summary?: DailySummary
+}
+
+/** 老師用：觸發後端從舊版放學公佈欄同步今日資料 */
+export async function syncFromLegacyBoard(): Promise<LegacySyncResult> {
+  const parsed = await fetchGasAction('syncFromLegacy')
+  if (!parsed || typeof parsed !== 'object') {
+    throw new ContactBookApiError('同步回傳格式無法辨識', 'parse')
+  }
+  const data = parsed as Record<string, unknown>
+  if (data.error) {
+    throw new ContactBookApiError(
+      typeof data.message === 'string' ? data.message : '從公佈欄同步失敗',
+      'http',
+    )
+  }
+
+  let summary: DailySummary | undefined
+  if (data.summary) {
+    summary = normalizeSummary(data.summary)
+    saveCache(summary)
+  }
+
+  return {
+    ok: data.ok !== false,
+    source: typeof data.source === 'string' ? data.source : undefined,
+    message: typeof data.message === 'string' ? data.message : undefined,
+    noticeCount:
+      typeof data.noticeCount === 'number' ? data.noticeCount : summary?.notices.length,
+    subjectCount:
+      typeof data.subjectCount === 'number'
+        ? data.subjectCount
+        : summary?.subjects.length,
+    summary,
+  }
 }
 
 export { GAS_EXEC_URL }

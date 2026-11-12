@@ -9,6 +9,8 @@
 | action | 說明 |
 |--------|------|
 | `getDailySummary` | 今日事項＋成績科目（有 120 秒快取） |
+| `syncFromLegacy` | 從舊版放學公佈欄同步今日資料並覆寫試算表 |
+| `installDailySyncTrigger` | 安裝每日 16:00（Asia/Taipei）自動同步觸發器 |
 | `setup` | 建立工作表；若空白則寫入示範資料 |
 | `purgeCache` | 清除今日快取 |
 | `health` | 健康檢查 |
@@ -16,6 +18,13 @@
 範例：
 
 `.../exec?action=getDailySummary`
+
+## 舊版同步
+
+1. 把 `JsonApi.gs` 合併進舊版家庭聯絡簿專案的 `doGet`（見檔內註解），重新部署舊版 Web App。  
+2. 或在本試算表「設定」工作表填入 `舊版試算表ID`，讓同步改為直接讀舊版表。  
+3. 部署本專案後，在編輯器執行一次 `installDailySyncTrigger()`（需授權 ScriptApp），或依賴 GitHub Actions `daily-legacy-sync.yml`（每天台北 16:00 呼叫 `syncFromLegacy`）。  
+4. 立刻手動跑一次 `?action=syncFromLegacy` 補今日資料。
 
 ## 推送
 
