@@ -3,6 +3,7 @@ import type { DailySummary } from '../types'
 
 const STORAGE_KEY = 'family-contact-book:last-summary'
 const STORAGE_META_KEY = 'family-contact-book:last-sync-at'
+const ENSURE_DAY_KEY = 'family-contact-book:last-ensure-day'
 
 export class ContactBookApiError extends Error {
   readonly code: 'network' | 'parse' | 'needs_api' | 'http'
@@ -78,6 +79,27 @@ export function loadCachedSummary(): DailySummary | null {
 
 export function loadLastSyncAt(): string | null {
   return localStorage.getItem(STORAGE_META_KEY)
+}
+
+export function loadLastEnsureDay(): string | null {
+  try {
+    return localStorage.getItem(ENSURE_DAY_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function markEnsuredToday(): void {
+  try {
+    localStorage.setItem(ENSURE_DAY_KEY, localTodayKey())
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 每個台北日曆日第一次開啟，或快取已跨日時，應強制再同步舊版 */
+export function shouldForceEnsureToday(): boolean {
+  return loadLastEnsureDay() !== localTodayKey()
 }
 
 function saveCache(summary: DailySummary): void {

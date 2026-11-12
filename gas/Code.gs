@@ -509,14 +509,207 @@ function fetchLegacyDailySummary_() {
   var sheetResult = fetchLegacySheetSummary_();
   if (sheetResult) return sheetResult;
 
+  var htmlResult = fetchLegacyHtmlSummary_();
+  if (htmlResult) return htmlResult;
+
   return {
     notices: [],
     subjects: [],
     unreachable: true,
     source: 'unreachable',
     message:
-      '舊版 JSON／試算表尚無法讀取，已保留現有今日資料（請合併 JsonApi.gs 或在設定填「舊版試算表ID」）',
+      '舊版 JSON／試算表／網頁尚無法讀取，已保留現有今日資料（請合併 JsonApi.gs 或在設定填「舊版試算表ID」）',
   };
+}
+
+/**
+ * 舊版只有 HtmlService 頁面時：抓外殼 → iframe → 抽出事項／科目。
+ * 不改舊版專案、也不需要試算表 ID。
+ */
+function fetchLegacyHtmlSummary_() {
+  var base = getLegacyExecUrl_();
+  var pages = [];
+  var seen = {};
+  var queue = [base];
+  var maxPages = 4;
+
+  while (queue.length && pages.length < maxPages) {
+    var url = queue.shift();
+    if (!url || seen[url]) continue;
+    seen[url] = true;
+    var html = fetchUrlText_(url);
+    if (!html) continue;
+    pages.push(html);
+
+    var iframes = extractIframeSrcs_(html);
+    for (var i = 0; i < iframes.length; i++) {
+      if (!seen[iframes[i]]) queue.push(iframes[i]);
+    }
+  }
+
+  for (var p = 0; p < pages.length; p++) {
+    var parsed = parseLegacyHtmlPage_(pages[p]);
+    if (parsed && parsed.notices.length) {
+      return {
+        notices: parsed.notices,
+        subjects: parsed.subjects,
+        source: 'legacy_html',
+        message: '已從舊版公佈欄網頁同步',
+      };
+    }
+  }
+  return null;
+}
+
+function fetchUrlText_(url) {
+  try {
+    var resp = UrlFetchApp.fetch(url, {
+      muteHttpExceptions: true,
+      followRedirects: true,
+      headers: {
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'User-Agent':
+          'Mozilla/5.0 (compatible; SchoolAppSync/1.0; +https://vincent1021210.github.io/School-APP/)',
+      },
+    });
+    var code = resp.getResponseCode();
+    if (code < 200 || code >= 400) return '';
+    return String(resp.getContentText() || '');
+  } catch (err) {
+    return '';
+  }
+}
+
+function extractIframeSrcs_(html) {
+  var out = [];
+  var re = /<iframe\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  var match;
+  while ((match = re.exec(html))) {
+    var src = decodeHtmlEntities_(match[1] || '').trim();
+    if (
+      src &&
+      (src.indexOf('googleusercontent.com') >= 0 ||
+        src.indexOf('userCodeAppPanel') >= 0 ||
+        src.indexOf('userHtmlFrame') >= 0 ||
+        src.indexOf('/macros/') >= 0)
+    ) {
+      out.push(src);
+    }
+  }
+  var idMatch = html.match(/id=["']userHtmlFrame["'][^>]*src=["']([^"']+)["']/i);
+  if (idMatch && idMatch[1]) out.unshift(decodeHtmlEntities_(idMatch[1]).trim());
+  return uniqueStrings_(out);
+}
+
+function parseLegacyHtmlPage_(html) {
+  if (!html || html.indexOf('<') < 0) return null;
+  var subjectHeading = findHeadingIndex_(html, ['成績科目', '今日成績', '登載科目']);
+  var noticeHeading = findHeadingIndex_(html, ['今日事項', '聯絡事項', '今日聯絡', '放學公佈']);
+
+  var noticesHtml = html;
+  var subjectsHtml = '';
+  if (subjectHeading >= 0) {
+    subjectsHtml = html.slice(subjectHeading);
+    if (noticeHeading >= 0 && noticeHeading < subjectHeading) {
+      noticesHtml = html.slice(noticeHeading, subjectHeading);
+    } else if (noticeHeading > subjectHeading) {
+      noticesHtml = html.slice(noticeHeading);
+      subjectsHtml = html.slice(subjectHeading, noticeHeading);
+    }
+  } else if (noticeHeading >= 0) {
+    noticesHtml = html.slice(noticeHeading);
+  }
+
+  var notices = extractListItems_(noticesHtml);
+  var subjects = subjectsHtml ? extractListItems_(subjectsHtml) : [];
+
+  if (!notices.length) notices = extractListItems_(html);
+  notices = notices.filter(isLikelyNotice_);
+  subjects = uniqueStrings_(subjects.filter(isLikelySubject_));
+
+  if (!notices.length) return null;
+  return { notices: notices, subjects: subjects };
+}
+
+function findHeadingIndex_(html, labels) {
+  var lower = html.toLowerCase();
+  for (var i = 0; i < labels.length; i++) {
+    var idx = lower.indexOf(String(labels[i]).toLowerCase());
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
+function extractListItems_(html) {
+  var out = [];
+  var liRe = /<li\b[^>]*>([\s\S]*?)<\/li>/gi;
+  var match;
+  while ((match = liRe.exec(html))) {
+    var text = collapseWs_(stripTags_(match[1] || ''));
+    if (text) out.push(text);
+  }
+  if (!out.length) {
+    var pRe = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
+    while ((match = pRe.exec(html))) {
+      var pText = collapseWs_(stripTags_(match[1] || ''));
+      if (pText) out.push(pText);
+    }
+  }
+  return uniqueStrings_(out);
+}
+
+function isLikelyNotice_(text) {
+  if (!text || text.length < 2 || text.length > 400) return false;
+  if (
+    /Report abuse|Learn more|Dismiss|This application was created|Google Apps Script|使用 PATS|登入/i.test(
+      text,
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function isLikelySubject_(text) {
+  if (!text || text.length > 20) return false;
+  return /^[\u4e00-\u9fffA-Za-z0-9]{1,12}$/.test(text);
+}
+
+function stripTags_(html) {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ');
+}
+
+function decodeHtmlEntities_(text) {
+  return String(text || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#(\d+);/g, function (_, n) {
+      return String.fromCharCode(Number(n));
+    });
+}
+
+function collapseWs_(text) {
+  return decodeHtmlEntities_(text).replace(/\s+/g, ' ').trim();
+}
+
+function uniqueStrings_(list) {
+  var out = [];
+  var seen = {};
+  for (var i = 0; i < list.length; i++) {
+    var s = String(list[i] || '').trim();
+    if (!s || seen[s]) continue;
+    seen[s] = true;
+    out.push(s);
+  }
+  return out;
 }
 
 function fetchLegacyJsonSummary_() {

@@ -2,11 +2,13 @@ name: Daily today contact-book sync
 
 on:
   schedule:
-    # 台北 07:00 / 12:00 / 16:00 / 18:00 → 確保「當天」有資料
-    - cron: '0 23 * * *' # 07:00 Taipei (前一天 23:00 UTC)
-    - cron: '0 4 * * *'  # 12:00 Taipei
-    - cron: '0 8 * * *'  # 16:00 Taipei
-    - cron: '0 10 * * *' # 18:00 Taipei
+    # 台北 00:10 / 07:00 / 08:00 / 12:00 / 16:00 / 18:00 → 跨日與當天更新
+    - cron: '10 16 * * *' # 00:10 Taipei
+    - cron: '0 23 * * *'  # 07:00 Taipei
+    - cron: '0 0 * * *'   # 08:00 Taipei
+    - cron: '0 4 * * *'   # 12:00 Taipei
+    - cron: '0 8 * * *'   # 16:00 Taipei
+    - cron: '0 10 * * *'  # 18:00 Taipei
   workflow_dispatch:
 
 jobs:

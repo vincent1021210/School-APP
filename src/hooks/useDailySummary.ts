@@ -1,13 +1,30 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ContactBookApiError,
   ensureTodayReady,
   fetchDailySummary,
   loadCachedSummary,
   loadLastSyncAt,
+  localTodayKey,
+  markEnsuredToday,
+  shouldForceEnsureToday,
   syncFromLegacyBoard,
 } from '../api/contactBook'
 import type { DailySummary, FetchStatus } from '../types'
+
+const POLL_MS = 15 * 60 * 1000
+
+function applySyncMessage(source?: string, message?: string | null): string | null {
+  if (
+    source === 'unreachable' ||
+    source === 'empty' ||
+    source === 'legacy_sheet_error' ||
+    source === 'rolled_forward'
+  ) {
+    return message ?? null
+  }
+  return null
+}
 
 /**
  * 先顯示本機快取（瞬間出畫面），背景再拉新資料（stale-while-revalidate）
@@ -26,9 +43,16 @@ export function useDailySummary(enabled = true) {
   )
   const [refreshing, setRefreshing] = useState(false)
   const [syncingLegacy, setSyncingLegacy] = useState(false)
+  const dayRef = useRef(localTodayKey())
+
+  const applySummary = useCallback((data: DailySummary) => {
+    setSummary(data)
+    setLastSyncAt(data.updatedAt ?? new Date().toISOString())
+    setStatus('ok')
+  }, [])
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
-    const silent = Boolean(opts?.silent) && Boolean(loadCachedSummary() || summary)
+    const silent = Boolean(opts?.silent) && Boolean(loadCachedSummary())
     if (!silent) {
       setStatus('loading')
     } else {
@@ -38,9 +62,7 @@ export function useDailySummary(enabled = true) {
 
     try {
       const data = await fetchDailySummary()
-      setSummary(data)
-      setLastSyncAt(data.updatedAt ?? new Date().toISOString())
-      setStatus('ok')
+      applySummary(data)
     } catch (err) {
       const cached = loadCachedSummary()
       if (cached) {
@@ -64,40 +86,37 @@ export function useDailySummary(enabled = true) {
     } finally {
       setRefreshing(false)
     }
-  }, [summary])
+  }, [applySummary])
+
+  const ensureToday = useCallback(async (force: boolean) => {
+    const result = await ensureTodayReady(force)
+    if (result.summary) {
+      applySummary(result.summary)
+      markEnsuredToday()
+      dayRef.current = localTodayKey()
+    }
+    const msg = applySyncMessage(result.source, result.message)
+    if (msg) setErrorMessage(msg)
+    else if (result.summary) setErrorMessage(null)
+    return result
+  }, [applySummary])
 
   const syncLegacy = useCallback(async () => {
     setSyncingLegacy(true)
     setErrorMessage(null)
     try {
-      const result = await ensureTodayReady(true)
-      if (result.summary) {
-        setSummary(result.summary)
-        setLastSyncAt(result.summary.updatedAt ?? new Date().toISOString())
-      } else {
+      const result = await ensureToday(true)
+      if (!result.summary) {
         const data = await fetchDailySummary()
-        setSummary(data)
-        setLastSyncAt(data.updatedAt ?? new Date().toISOString())
-      }
-      setStatus('ok')
-      if (
-        result.source === 'unreachable' ||
-        result.source === 'empty' ||
-        result.source === 'legacy_sheet_error' ||
-        result.source === 'rolled_forward'
-      ) {
-        setErrorMessage(result.message ?? null)
-      } else {
-        setErrorMessage(null)
+        applySummary(data)
+        markEnsuredToday()
       }
     } catch (err) {
-      // 後備：至少再試舊版同步
       try {
         const fallback = await syncFromLegacyBoard()
         if (fallback.summary) {
-          setSummary(fallback.summary)
-          setLastSyncAt(fallback.summary.updatedAt ?? new Date().toISOString())
-          setStatus('ok')
+          applySummary(fallback.summary)
+          markEnsuredToday()
           return
         }
       } catch {
@@ -108,21 +127,15 @@ export function useDailySummary(enabled = true) {
     } finally {
       setSyncingLegacy(false)
     }
-  }, [])
+  }, [applySummary, ensureToday])
 
   useEffect(() => {
     if (!enabled) return
     let cancelled = false
     ;(async () => {
-      // 每天進 App：先確保「當天」列存在，再拉摘要（避免跨日空白／卡舊快取）
+      const force = shouldForceEnsureToday()
       try {
-        const ensured = await ensureTodayReady(false)
-        if (cancelled) return
-        if (ensured.summary) {
-          setSummary(ensured.summary)
-          setLastSyncAt(ensured.summary.updatedAt ?? new Date().toISOString())
-          setStatus('ok')
-        }
+        await ensureToday(force)
       } catch {
         /* 後續 refresh 會再試 */
       }
@@ -134,6 +147,31 @@ export function useDailySummary(enabled = true) {
     // 登入後才開始拉取；enabled 由 false→true 時再跑
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled])
+
+  useEffect(() => {
+    if (!enabled) return
+
+    const tick = () => {
+      const today = localTodayKey()
+      if (today !== dayRef.current || shouldForceEnsureToday()) {
+        dayRef.current = today
+        void ensureToday(true).then(() => refresh({ silent: true }))
+        return
+      }
+      void refresh({ silent: true })
+    }
+
+    const timer = window.setInterval(tick, POLL_MS)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tick()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [enabled, ensureToday, refresh])
 
   return {
     summary,
