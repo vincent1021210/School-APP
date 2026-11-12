@@ -36,3 +36,11 @@ export const LEGACY_CONTACT_BOOK_URL =
 export const PATS_API_URL =
   (import.meta.env.VITE_PATS_API_URL as string | undefined)?.trim() ||
   'https://script.google.com/macros/s/AKfycbxtGvk9Tmo2IC2fdKbg3cOPxYuWYpMtgmE01z3vddgXDLIIogXAH72iB9bNRaKQFjqpvQ/exec'
+
+/**
+ * PATS Google 登入用網頁用戶端 ID（與 PATS 相同）
+ * 可用環境變數 VITE_PATS_GOOGLE_CLIENT_ID 覆蓋
+ */
+export const PATS_GOOGLE_CLIENT_ID =
+  (import.meta.env.VITE_PATS_GOOGLE_CLIENT_ID as string | undefined)?.trim() ||
+  '354935544437-1vrje0je178afce6nturpghuu5r16qp6.apps.googleusercontent.com'

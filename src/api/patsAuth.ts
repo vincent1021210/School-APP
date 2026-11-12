@@ -8,6 +8,13 @@ const ERROR_TEXT: Record<string, string> = {
   BAD_RESPONSE: 'PATS 伺服器回應格式不正確。',
   INVALID_CREDENTIALS: '帳號或密碼不正確，或尚未註冊 PATS 帳號。',
   AUTH_REQUIRED: '登入狀態已過期，請重新登入。',
+  GOOGLE_LOGIN_NOT_CONFIGURED: '後端尚未設定 Google 登入，請改用帳密。',
+  GOOGLE_TOKEN_MISSING: '沒有取得 Google 憑證，請重新嘗試。',
+  GOOGLE_TOKEN_INVALID: 'Google 憑證驗證失敗，請重新嘗試。',
+  GOOGLE_TOKEN_EXPIRED: 'Google 憑證已過期，請重新登入。',
+  GOOGLE_AUDIENCE_MISMATCH: 'Google 登入設定不符，請聯絡管理員。',
+  GOOGLE_ISSUER_MISMATCH: 'Google 憑證來源不正確。',
+  GOOGLE_EMAIL_UNVERIFIED: '請使用已驗證的 Google 信箱登入。',
   UNKNOWN_ERROR: '登入失敗，請稍後再試。',
 }
 
@@ -104,24 +111,42 @@ export function loadStoredToken(): string | null {
   return readToken()
 }
 
+function acceptLoginResult(data: unknown): { token: string; user: AuthUser } {
+  if (!data || typeof data !== 'object') throw new PatsAuthError('BAD_RESPONSE')
+  const payload = data as { token?: string; user?: unknown }
+  if (typeof payload.token !== 'string' || !payload.token) {
+    throw new PatsAuthError('BAD_RESPONSE')
+  }
+  const user = normalizeUser(payload.user)
+  writeToken(payload.token)
+  return { token: payload.token, user }
+}
+
 export async function loginWithPats(
   account: string,
   password: string,
   remember: boolean,
 ): Promise<{ token: string; user: AuthUser }> {
-  const data = (await patsRpc('login', {
-    account: account.trim(),
-    password,
-    remember,
-  }, null)) as { token?: string; user?: unknown } | null
+  const data = await patsRpc(
+    'login',
+    {
+      account: account.trim(),
+      password,
+      remember,
+    },
+    null,
+  )
+  return acceptLoginResult(data)
+}
 
-  if (!data || typeof data.token !== 'string' || !data.token) {
-    throw new PatsAuthError('BAD_RESPONSE')
-  }
-
-  const user = normalizeUser(data.user)
-  writeToken(data.token)
-  return { token: data.token, user }
+/** Google Identity Services 回傳的 ID Token → PATS googleLogin */
+export async function loginWithPatsGoogle(
+  credential: string,
+): Promise<{ token: string; user: AuthUser }> {
+  const token = String(credential || '').trim()
+  if (!token) throw new PatsAuthError('GOOGLE_TOKEN_MISSING')
+  const data = await patsRpc('googleLogin', { credential: token }, null)
+  return acceptLoginResult(data)
 }
 
 export async function restorePatsSession(token?: string | null): Promise<AuthUser | null> {

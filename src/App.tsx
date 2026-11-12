@@ -52,6 +52,7 @@ export default function App() {
             busy={auth.busy}
             errorMessage={auth.errorMessage}
             onLogin={auth.login}
+            onGoogleLogin={auth.loginWithGoogle}
           />
         </main>
       </div>

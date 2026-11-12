@@ -138,6 +138,41 @@ a {
   margin-top: 4px;
 }
 
+.login-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 12px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  height: 1px;
+  background: var(--line);
+}
+
+.google-login-block {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.google-slot {
+  display: flex;
+  justify-content: center;
+  min-height: 44px;
+}
+
+.google-slot.is-busy {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
 .app-main {
   padding: 4px 16px 96px;
   overflow: auto;
