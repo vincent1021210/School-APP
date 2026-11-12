@@ -28,3 +28,11 @@ export const APP_SUBTITLE = '班級放學公佈欄'
 /** 舊版放學大螢幕（同步來源） */
 export const LEGACY_CONTACT_BOOK_URL =
   'https://script.google.com/macros/s/AKfycbwBE0IVr9JuF92lpHMTUQiTgIpjxBYZWidAXHEfICwumlHggm31kfbD3Y3_mlznVuES/exec'
+
+/**
+ * PATS 帳號系統 Web App（登入／工作階段）
+ * 可用環境變數 VITE_PATS_API_URL 覆蓋
+ */
+export const PATS_API_URL =
+  (import.meta.env.VITE_PATS_API_URL as string | undefined)?.trim() ||
+  'https://script.google.com/macros/s/AKfycbxtGvk9Tmo2IC2fdKbg3cOPxYuWYpMtgmE01z3vddgXDLIIogXAH72iB9bNRaKQFjqpvQ/exec'

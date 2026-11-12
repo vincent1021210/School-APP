@@ -8,8 +8,10 @@ type Props = {
   subjectCount: number
   refreshing?: boolean
   syncingLegacy?: boolean
+  userLabel?: string | null
   onRefresh: () => void
   onSyncFromLegacy?: () => void
+  onLogout?: () => void
 }
 
 function formatStamp(iso: string | null): string {
@@ -27,8 +29,10 @@ export function SyncScreen({
   subjectCount,
   refreshing = false,
   syncingLegacy = false,
+  userLabel = null,
   onRefresh,
   onSyncFromLegacy,
+  onLogout,
 }: Props) {
   const busy = status === 'loading' || refreshing || syncingLegacy
 
@@ -41,6 +45,12 @@ export function SyncScreen({
 
       <div className="panel">
         <dl className="meta-list">
+          {userLabel && (
+            <div>
+              <dt>登入身分</dt>
+              <dd>{userLabel}</dd>
+            </div>
+          )}
           <div>
             <dt>上次更新</dt>
             <dd>{formatStamp(lastSyncAt)}</dd>
@@ -83,6 +93,18 @@ export function SyncScreen({
             style={{ marginTop: '0.75rem' }}
           >
             {syncingLegacy ? '同步中…' : '從放學公佈欄同步'}
+          </button>
+        )}
+
+        {onLogout && (
+          <button
+            type="button"
+            className="btn ghost wide"
+            onClick={onLogout}
+            disabled={busy}
+            style={{ marginTop: '0.75rem' }}
+          >
+            登出 PATS 帳號
           </button>
         )}
 

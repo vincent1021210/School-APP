@@ -10,14 +10,19 @@ import type { DailySummary, FetchStatus } from '../types'
 
 /**
  * 先顯示本機快取（瞬間出畫面），背景再拉新資料（stale-while-revalidate）
+ * enabled=false 時不自動拉取（未登入閘道用）
  */
-export function useDailySummary() {
-  const [summary, setSummary] = useState<DailySummary | null>(() => loadCachedSummary())
+export function useDailySummary(enabled = true) {
+  const [summary, setSummary] = useState<DailySummary | null>(() =>
+    enabled ? loadCachedSummary() : null,
+  )
   const [status, setStatus] = useState<FetchStatus>(() =>
-    loadCachedSummary() ? 'ok' : 'idle',
+    enabled && loadCachedSummary() ? 'ok' : 'idle',
   )
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(() => loadLastSyncAt())
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(() =>
+    enabled ? loadLastSyncAt() : null,
+  )
   const [refreshing, setRefreshing] = useState(false)
   const [syncingLegacy, setSyncingLegacy] = useState(false)
 
@@ -93,10 +98,11 @@ export function useDailySummary() {
   }, [])
 
   useEffect(() => {
+    if (!enabled) return
     void refresh({ silent: true })
-    // 只在掛載時跑一次
+    // 登入後才開始拉取；enabled 由 false→true 時再跑
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [enabled])
 
   return {
     summary,
