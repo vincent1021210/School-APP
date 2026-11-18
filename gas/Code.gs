@@ -20,12 +20,35 @@ var SHEET_META = '設定';
 var LEGACY_EXEC_URL =
   'https://script.google.com/macros/s/AKfycbwBE0IVr9JuF92lpHMTUQiTgIpjxBYZWidAXHEfICwumlHggm31kfbD3Y3_mlznVuES/exec';
 var DAILY_SYNC_HANDLER = 'ensureTodayReadyForced';
+/** 瀏覽器爬蟲寫入用；可在設定工作表「同步密鑰」覆蓋 */
+var DEFAULT_SCRAPE_TOKEN = 'school-app-legacy-scrape-v1';
 
 function doGet(e) {
   ensureSchema_();
   var params = (e && e.parameter) || {};
   var action = String(params.action || 'getDailySummary');
   return handleApi_(action, params);
+}
+
+function doPost(e) {
+  ensureSchema_();
+  try {
+    var raw = e && e.postData && e.postData.contents ? String(e.postData.contents) : '';
+    var body = raw ? JSON.parse(raw) : {};
+    var action = String((body && body.action) || '');
+    if (action === 'importScrapedToday') {
+      return json_(importScrapedToday_(body), '');
+    }
+    return json_({ error: 'unknown_action', action: action }, '');
+  } catch (err) {
+    return json_(
+      {
+        error: 'server_error',
+        message: String(err && err.message ? err.message : err),
+      },
+      '',
+    );
+  }
 }
 
 function handleApi_(action, params) {
@@ -201,16 +224,18 @@ function ensureSchema_() {
     meta = ss.insertSheet(SHEET_META);
   }
   if (meta.getLastRow() === 0) {
-    meta.getRange(1, 1, 5, 2).setValues([
+    meta.getRange(1, 1, 6, 2).setValues([
       ['鍵', '值'],
       ['班級名稱', '班級家庭聯絡簿'],
       ['快取秒數', String(CACHE_TTL_SEC)],
       ['舊版公佈欄網址', LEGACY_EXEC_URL],
       ['舊版試算表ID', ''],
+      ['同步密鑰', DEFAULT_SCRAPE_TOKEN],
     ]);
   } else {
     ensureMetaKey_(meta, '舊版公佈欄網址', LEGACY_EXEC_URL);
     ensureMetaKey_(meta, '舊版試算表ID', '');
+    ensureMetaKey_(meta, '同步密鑰', DEFAULT_SCRAPE_TOKEN);
   }
 
   // 移除預設空白「工作表1」若已有業務表且它是空的
@@ -275,18 +300,48 @@ function seedDemoIfEmpty_() {
 /** 匯入指定的今日作業（由 clasp 執行，無需帶參數） */
 function importAssignedHomework() {
   var notices = [
-    '耆ㄑㄧˊ宿、嗜ㄕˋ 痂ㄐㄧㄚ成癖ㄆㄧˇ、不待蓍ㄕ龜、葬ㄗㄤˋ身之地',
-    '英講到65',
-    '生紀到58',
-    '生講到47',
-    '明考英單13～27 生物3-1 3-2',
-    '學思達p92～95',
-    '數講到46',
-    '數課到147',
-    '明天記得交 38元 童軍繩費給童家老師',
+    '明考國國字注音100題，L4公民、模考生物、國L4大卷、數2-3',
+    '地卷x1',
+    '地習、講L4',
+    '國黃本p27～31（下週一交）',
   ];
   saveTodayNotices(notices);
-  return saveTodaySubjects(['英文']);
+  return saveTodaySubjects(['國文', '英文', '生物', '地理']);
+}
+
+function getScrapeToken_() {
+  return getMetaValue_('同步密鑰', DEFAULT_SCRAPE_TOKEN);
+}
+
+/**
+ * 給 GitHub Actions 瀏覽器爬蟲寫入「當天」事項。
+ * body: { token, notices: string[], subjects: string[], dateLabel? }
+ */
+function importScrapedToday_(body) {
+  var token = String((body && body.token) || '');
+  if (!token || token !== getScrapeToken_()) {
+    return { ok: false, error: 'AUTH', message: '同步密鑰不正確' };
+  }
+
+  var notices = normalizeNoticeList_((body && body.notices) || []);
+  var subjects = normalizeSubjectList_((body && body.subjects) || []);
+  if (!notices.length) {
+    return { ok: false, error: 'EMPTY', message: '爬蟲沒有抓到聯絡事項' };
+  }
+
+  saveTodayNotices(notices);
+  saveTodaySubjects(subjects);
+  var summary = getDailySummaryFast_();
+  return {
+    ok: true,
+    source: 'legacy_browser_scrape',
+    message: '已從舊版公佈欄網頁（瀏覽器爬蟲）寫入當天',
+    dateLabel: summary.dateLabel,
+    noticeCount: summary.notices.length,
+    subjectCount: summary.subjects.length,
+    summary: summary,
+    rolledForward: false,
+  };
 }
 
 function invalidateDailyCache_() {

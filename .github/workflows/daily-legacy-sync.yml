@@ -15,27 +15,43 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Ensure today's contact-book rows
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Scrape legacy board and import today
+        env:
+          LEGACY_BOARD_URL: https://script.google.com/macros/s/AKfycbwBE0IVr9JuF92lpHMTUQiTgIpjxBYZWidAXHEfICwumlHggm31kfbD3Y3_mlznVuES/exec
+          GAS_EXEC_URL: https://script.google.com/macros/s/AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg/exec
+          SCRAPE_TOKEN: ${{ secrets.SCHOOL_APP_SYNC_TOKEN }}
         run: |
           set -euo pipefail
-          BASE='https://script.google.com/macros/s/AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg/exec'
-          echo "Calling ensureToday (force sync)..."
-          curl -fsSL --max-time 90 "${BASE}?action=ensureToday&force=1" | tee sync-result.json
+          if [ -z "${SCRAPE_TOKEN}" ]; then
+            export SCRAPE_TOKEN='school-app-legacy-scrape-v1'
+          fi
+          node scripts/scrape-legacy-board.mjs
           echo
           echo "Verifying getDailySummary..."
-          curl -fsSL --max-time 60 "${BASE}?action=getDailySummary" | tee summary.json
+          curl -fsSL --max-time 60 "${GAS_EXEC_URL}?action=getDailySummary" | tee summary.json
           python3 - <<'PY'
           import json
-          sync = json.load(open('sync-result.json', encoding='utf-8'))
+          scrape = json.load(open('legacy-scrape.json', encoding='utf-8'))
           summary = json.load(open('summary.json', encoding='utf-8'))
-          if sync.get('error'):
-              raise SystemExit(f"sync error: {sync}")
           print(
-              'source=', sync.get('source'),
-              'rolled=', sync.get('rolledForward'),
-              'notices=', sync.get('noticeCount'),
+              'scraped=', scrape.get('noticeCount'),
+              'imported=', (scrape.get('import') or {}).get('noticeCount'),
+              'summary=', len(summary.get('notices') or []),
               'date=', summary.get('dateLabel'),
           )
-          if summary.get('dateLabel') and sync.get('dateLabel') and summary['dateLabel'] != sync['dateLabel']:
-              raise SystemExit('date mismatch between ensureToday and summary')
+          if not scrape.get('notices'):
+              raise SystemExit('scrape produced no notices')
+          if summary.get('dateLabel') and scrape.get('dateLabel') and summary['dateLabel'] != scrape['dateLabel']:
+              raise SystemExit('date mismatch between scrape and summary')
           PY
