@@ -8,6 +8,19 @@ const ERROR_TEXT: Record<string, string> = {
   BAD_RESPONSE: 'PATS 伺服器回應格式不正確。',
   INVALID_CREDENTIALS: '帳號或密碼不正確，或尚未註冊 PATS 帳號。',
   AUTH_REQUIRED: '登入狀態已過期，請重新登入。',
+  WEAK_PASSWORD: '密碼至少需要 8 個字元。',
+  USERNAME_TOO_SHORT: '顯示名稱至少需要 2 個字元。',
+  USERNAME_TOO_LONG: '顯示名稱不能超過 40 個字元。',
+  EMAIL_TAKEN: '這個電子郵件已經註冊過了，請直接登入。',
+  EMAIL_INVALID: '請輸入有效的電子郵件格式。',
+  PASSWORD_MISMATCH: '兩次輸入的密碼不一致。',
+  INVITE_CODE_REQUIRED: '這個站台需要邀請碼才能註冊，請向管理員索取。',
+  INVITE_CODE_INVALID: '邀請碼不正確。',
+  SIGNUP_CODE_INVALID: '驗證碼不正確，請確認後再試一次。',
+  SIGNUP_CODE_EXPIRED: '驗證碼已過期，請重新填寫資料並索取一組新的。',
+  SIGNUP_TOO_MANY_ATTEMPTS: '錯誤次數過多，這組驗證碼已失效，請重新申請。',
+  SIGNUP_TOO_SOON: '驗證碼剛剛才寄出，請等一分鐘再重新寄送。',
+  SIGNUP_NOT_REQUESTED: '找不到這次的註冊資料，請重新填寫一次。',
   GOOGLE_LOGIN_NOT_CONFIGURED: '後端尚未設定 Google 登入，請改用帳密。',
   GOOGLE_TOKEN_MISSING: '沒有取得 Google 憑證，請重新嘗試。',
   GOOGLE_TOKEN_INVALID: 'Google 憑證驗證失敗，請重新嘗試。',
@@ -146,6 +159,43 @@ export async function loginWithPatsGoogle(
   const token = String(credential || '').trim()
   if (!token) throw new PatsAuthError('GOOGLE_TOKEN_MISSING')
   const data = await patsRpc('googleLogin', { credential: token }, null)
+  return acceptLoginResult(data)
+}
+
+export async function requestPatsSignupCode(input: {
+  displayName: string
+  email: string
+  inviteCode?: string
+}): Promise<void> {
+  await patsRpc(
+    'requestSignupCode',
+    {
+      displayName: input.displayName.trim(),
+      email: input.email.trim(),
+      inviteCode: String(input.inviteCode || '').trim(),
+    },
+    null,
+  )
+}
+
+export async function registerWithPats(input: {
+  email: string
+  code: string
+  displayName: string
+  password: string
+  remember: boolean
+}): Promise<{ token: string; user: AuthUser }> {
+  const data = await patsRpc(
+    'register',
+    {
+      email: input.email.trim(),
+      code: input.code.trim(),
+      displayName: input.displayName.trim(),
+      password: input.password,
+      remember: input.remember,
+    },
+    null,
+  )
   return acceptLoginResult(data)
 }
 

@@ -134,6 +134,23 @@ a {
   font-size: 0.88rem;
 }
 
+.login-switch {
+  margin: 14px 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.text-link {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
 .login-panel .btn.wide {
   margin-top: 4px;
 }

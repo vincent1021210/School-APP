@@ -5,8 +5,15 @@ import {
   loginWithPatsGoogle,
   logoutPats,
   PatsAuthError,
+  registerWithPats,
+  requestPatsSignupCode,
   restorePatsSession,
 } from '../api/patsAuth'
+
+export type AuthActionResult = {
+  ok: boolean
+  code?: string
+}
 import type { AuthStatus, AuthUser } from '../types'
 
 function toAuthErrorMessage(err: unknown): string {
@@ -61,12 +68,15 @@ export function useAuth() {
       const result = await loginWithPats(account, password, remember)
       setUser(result.user)
       setStatus('authenticated')
-      return true
+      return { ok: true } satisfies AuthActionResult
     } catch (err) {
       setUser(null)
       setStatus('anonymous')
       setErrorMessage(toAuthErrorMessage(err))
-      return false
+      return {
+        ok: false,
+        code: err instanceof PatsAuthError ? err.code : 'UNKNOWN_ERROR',
+      } satisfies AuthActionResult
     } finally {
       setBusy(false)
     }
@@ -79,16 +89,69 @@ export function useAuth() {
       const result = await loginWithPatsGoogle(credential)
       setUser(result.user)
       setStatus('authenticated')
-      return true
+      return { ok: true } satisfies AuthActionResult
     } catch (err) {
       setUser(null)
       setStatus('anonymous')
       setErrorMessage(toAuthErrorMessage(err))
-      return false
+      return {
+        ok: false,
+        code: err instanceof PatsAuthError ? err.code : 'UNKNOWN_ERROR',
+      } satisfies AuthActionResult
     } finally {
       setBusy(false)
     }
   }, [])
+
+  const requestSignupCode = useCallback(
+    async (input: { displayName: string; email: string; inviteCode?: string }) => {
+      setBusy(true)
+      setErrorMessage(null)
+      try {
+        await requestPatsSignupCode(input)
+        return { ok: true } satisfies AuthActionResult
+      } catch (err) {
+        setErrorMessage(toAuthErrorMessage(err))
+        return {
+          ok: false,
+          code: err instanceof PatsAuthError ? err.code : 'UNKNOWN_ERROR',
+        } satisfies AuthActionResult
+      } finally {
+        setBusy(false)
+      }
+    },
+    [],
+  )
+
+  const register = useCallback(
+    async (input: {
+      email: string
+      code: string
+      displayName: string
+      password: string
+      remember: boolean
+    }) => {
+      setBusy(true)
+      setErrorMessage(null)
+      try {
+        const result = await registerWithPats(input)
+        setUser(result.user)
+        setStatus('authenticated')
+        return { ok: true } satisfies AuthActionResult
+      } catch (err) {
+        setUser(null)
+        setStatus('anonymous')
+        setErrorMessage(toAuthErrorMessage(err))
+        return {
+          ok: false,
+          code: err instanceof PatsAuthError ? err.code : 'UNKNOWN_ERROR',
+        } satisfies AuthActionResult
+      } finally {
+        setBusy(false)
+      }
+    },
+    [],
+  )
 
   const logout = useCallback(async () => {
     setBusy(true)
@@ -111,6 +174,8 @@ export function useAuth() {
     errorMessage,
     login,
     loginWithGoogle,
+    requestSignupCode,
+    register,
     logout,
     clearError: () => setErrorMessage(null),
   }

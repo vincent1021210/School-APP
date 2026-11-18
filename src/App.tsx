@@ -53,6 +53,9 @@ export default function App() {
             errorMessage={auth.errorMessage}
             onLogin={auth.login}
             onGoogleLogin={auth.loginWithGoogle}
+            onRequestSignupCode={auth.requestSignupCode}
+            onRegister={auth.register}
+            onClearError={auth.clearError}
           />
         </main>
       </div>
