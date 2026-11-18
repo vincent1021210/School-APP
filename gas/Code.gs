@@ -23,6 +23,8 @@ var LEGACY_EXEC_URL =
 var DAILY_SYNC_HANDLER = 'ensureTodayReadyForced';
 /** 瀏覽器爬蟲寫入用；可在設定工作表「同步密鑰」覆蓋 */
 var DEFAULT_SCRAPE_TOKEN = 'school-app-legacy-scrape-v1';
+/** 每日聯絡簿寄件帳號（Gmail 別名或部署者帳號） */
+var MAIL_FROM = 'patspats799@gmail.com';
 
 function doGet(e) {
   ensureSchema_();
@@ -240,18 +242,20 @@ function ensureSchema_() {
     meta = ss.insertSheet(SHEET_META);
   }
   if (meta.getLastRow() === 0) {
-    meta.getRange(1, 1, 6, 2).setValues([
+    meta.getRange(1, 1, 7, 2).setValues([
       ['鍵', '值'],
       ['班級名稱', '班級家庭聯絡簿'],
       ['快取秒數', String(CACHE_TTL_SEC)],
       ['舊版公佈欄網址', LEGACY_EXEC_URL],
       ['舊版試算表ID', ''],
       ['同步密鑰', DEFAULT_SCRAPE_TOKEN],
+      ['寄件信箱', MAIL_FROM],
     ]);
   } else {
     ensureMetaKey_(meta, '舊版公佈欄網址', LEGACY_EXEC_URL);
     ensureMetaKey_(meta, '舊版試算表ID', '');
     ensureMetaKey_(meta, '同步密鑰', DEFAULT_SCRAPE_TOKEN);
+    ensureMetaKey_(meta, '寄件信箱', MAIL_FROM);
   }
 
   var mail = ss.getSheetByName(SHEET_MAIL);
@@ -1159,15 +1163,10 @@ function sendDailyContactBookMail_() {
   var bodies = buildDailyMailBodies_(summary);
   var sent = 0;
   var failed = 0;
+  var from = getMailFrom_();
   for (var i = 0; i < subscribers.length; i++) {
     try {
-      MailApp.sendEmail({
-        to: subscribers[i],
-        subject: bodies.subject,
-        body: bodies.text,
-        htmlBody: bodies.html,
-        name: '班級家庭聯絡簿',
-      });
+      sendSchoolMail_(subscribers[i], bodies, from);
       sent++;
     } catch (err) {
       failed++;
@@ -1181,7 +1180,40 @@ function sendDailyContactBookMail_() {
     noticeCount: (summary.notices || []).length,
     subjectCount: (summary.subjects || []).length,
     message: '已寄出 ' + sent + ' 封今日聯絡簿',
+    from: from,
   };
+}
+
+function getMailFrom_() {
+  return normalizeEmail_(getMetaValue_('寄件信箱', MAIL_FROM)) || MAIL_FROM;
+}
+
+function sendSchoolMail_(to, bodies, from) {
+  var options = {
+    htmlBody: bodies.html,
+    name: '班級家庭聯絡簿',
+    replyTo: from,
+  };
+  try {
+    options.from = from;
+    GmailApp.sendEmail(to, bodies.subject, bodies.text, options);
+    return;
+  } catch (err) {
+    delete options.from;
+  }
+  try {
+    GmailApp.sendEmail(to, bodies.subject, bodies.text, options);
+    return;
+  } catch (err2) {
+    MailApp.sendEmail({
+      to: to,
+      subject: bodies.subject,
+      body: bodies.text,
+      htmlBody: bodies.html,
+      name: '班級家庭聯絡簿',
+      replyTo: from,
+    });
+  }
 }
 
 function json_(obj, callbackName) {
