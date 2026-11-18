@@ -55,6 +55,9 @@ export default function App() {
             onGoogleLogin={auth.loginWithGoogle}
             onRequestSignupCode={auth.requestSignupCode}
             onRegister={auth.register}
+            onRequestReset={auth.requestReset}
+            onVerifyResetCode={auth.verifyResetCode}
+            onResetPassword={auth.resetPassword}
             onClearError={auth.clearError}
           />
         </main>

@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { APP_NAME, APP_SUBTITLE, PATS_GOOGLE_CLIENT_ID } from '../config'
 import type { AuthActionResult } from '../hooks/useAuth'
 
-type Mode = 'login' | 'register'
+type Mode = 'login' | 'register' | 'reset'
 
 type SignupDraft = {
   displayName: string
@@ -29,6 +29,9 @@ type Props = {
     password: string
     remember: boolean
   }) => Promise<AuthActionResult>
+  onRequestReset: (email: string) => Promise<AuthActionResult>
+  onVerifyResetCode: (email: string, code: string) => Promise<AuthActionResult>
+  onResetPassword: (ticket: string, newPassword: string) => Promise<AuthActionResult>
   onClearError?: () => void
 }
 
@@ -100,10 +103,14 @@ export function LoginScreen({
   onGoogleLogin,
   onRequestSignupCode,
   onRegister,
+  onRequestReset,
+  onVerifyResetCode,
+  onResetPassword,
   onClearError,
 }: Props) {
   const [mode, setMode] = useState<Mode>('login')
   const [registerStep, setRegisterStep] = useState<1 | 2>(1)
+  const [resetStep, setResetStep] = useState<1 | 2 | 3>(1)
   const [account, setAccount] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
@@ -114,6 +121,8 @@ export function LoginScreen({
   const [showInvite, setShowInvite] = useState(false)
   const [verifyCode, setVerifyCode] = useState('')
   const [signupDraft, setSignupDraft] = useState<SignupDraft | null>(null)
+  const [resetEmail, setResetEmail] = useState('')
+  const [resetTicket, setResetTicket] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
   const [googleHint, setGoogleHint] = useState<string | null>(null)
   const googleSlotRef = useRef<HTMLDivElement | null>(null)
@@ -183,9 +192,12 @@ export function LoginScreen({
   function switchMode(next: Mode) {
     setMode(next)
     setRegisterStep(1)
+    setResetStep(1)
     setLocalError(null)
     setVerifyCode('')
     setSignupDraft(null)
+    setResetTicket('')
+    setConfirmPassword('')
     onClearError?.()
   }
 
@@ -254,6 +266,68 @@ export function LoginScreen({
     setRegisterStep(2)
   }
 
+  async function sendResetCode(isResend: boolean) {
+    setLocalError(null)
+    const mail = (isResend ? resetEmail : email).trim()
+    if (!EMAIL_RE.test(mail)) {
+      setLocalError('請輸入有效的電子郵件格式。')
+      return
+    }
+    const result = await onRequestReset(mail)
+    if (!result.ok) return
+    setResetEmail(mail)
+    if (!isResend) setResetStep(2)
+  }
+
+  async function handleResetSubmit(event: FormEvent) {
+    event.preventDefault()
+    if (resetStep === 1) {
+      await sendResetCode(false)
+      return
+    }
+    if (resetStep === 2) {
+      setLocalError(null)
+      if (!verifyCode.trim()) {
+        setLocalError('請輸入信箱驗證碼。')
+        return
+      }
+      const result = await onVerifyResetCode(resetEmail, verifyCode.trim())
+      if (
+        !result.ok &&
+        (result.code === 'RESET_CODE_EXPIRED' || result.code === 'RESET_TOO_MANY_ATTEMPTS')
+      ) {
+        setResetStep(1)
+        setResetTicket('')
+        return
+      }
+      if (result.ok && result.ticket) {
+        setResetTicket(result.ticket)
+        setPassword('')
+        setConfirmPassword('')
+        setResetStep(3)
+      }
+      return
+    }
+
+    setLocalError(null)
+    if (password.length < 8) {
+      setLocalError('密碼至少需要 8 個字元。')
+      return
+    }
+    if (password !== confirmPassword) {
+      setLocalError('兩次輸入的密碼不一致。')
+      return
+    }
+    const result = await onResetPassword(resetTicket, password)
+    if (
+      !result.ok &&
+      (result.code === 'RESET_TICKET_INVALID' || result.code === 'RESET_CODE_EXPIRED')
+    ) {
+      setResetStep(1)
+      setResetTicket('')
+    }
+  }
+
   async function handleRegisterSubmit(event: FormEvent) {
     event.preventDefault()
     if (registerStep === 1) {
@@ -288,28 +362,38 @@ export function LoginScreen({
 
   const message = localError ?? errorMessage
   const registering = mode === 'register'
+  const resetting = mode === 'reset'
+
+  function handleFormSubmit(event: FormEvent) {
+    if (registering) return void handleRegisterSubmit(event)
+    if (resetting) return void handleResetSubmit(event)
+    return void handleLoginSubmit(event)
+  }
+
+  const subtitle = registering
+    ? registerStep === 2 && signupDraft
+      ? `驗證碼已寄到 ${signupDraft.email}，請查看收件匣`
+      : `${APP_SUBTITLE} · 註冊後會寫入 PATS，可同時登入通訊系統`
+    : resetting
+      ? resetStep === 2 && resetEmail
+        ? `驗證碼已寄到 ${resetEmail}，請查看收件匣`
+        : resetStep === 3
+          ? '驗證成功，請設定你的新密碼'
+          : '輸入你的電子郵件，我們會寄一組驗證碼給你'
+      : `${APP_SUBTITLE} · 登入後才能查看今日聯絡事項`
 
   return (
     <section className="screen login-screen">
       <header className="page-header">
         <p className="eyebrow">使用 PATS 帳號</p>
         <h1>
-          {registering ? '註冊' : '登入'} {APP_NAME}
+          {registering ? '註冊' : resetting ? '重設密碼' : '登入'} {APP_NAME}
         </h1>
-        <p className="muted">
-          {registering
-            ? registerStep === 2 && signupDraft
-              ? `驗證碼已寄到 ${signupDraft.email}，請查看收件匣`
-              : `${APP_SUBTITLE} · 註冊後會寫入 PATS，可同時登入通訊系統`
-            : `${APP_SUBTITLE} · 登入後才能查看今日聯絡事項`}
-        </p>
+        <p className="muted">{subtitle}</p>
       </header>
 
-      <form
-        className="panel login-panel"
-        onSubmit={(e) => void (registering ? handleRegisterSubmit(e) : handleLoginSubmit(e))}
-      >
-        {!registering && (
+      <form className="panel login-panel" onSubmit={handleFormSubmit}>
+        {mode === 'login' && (
           <>
             <label className="field">
               <span>帳號</span>
@@ -437,6 +521,66 @@ export function LoginScreen({
           </label>
         )}
 
+        {resetting && resetStep === 1 && (
+          <label className="field">
+            <span>電子郵件</span>
+            <input
+              type="email"
+              name="reset-email"
+              autoComplete="email"
+              placeholder="PATS 註冊信箱"
+              value={email}
+              disabled={busy}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+        )}
+
+        {resetting && resetStep === 2 && (
+          <label className="field">
+            <span>驗證碼</span>
+            <input
+              type="text"
+              name="reset-code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="6 位數驗證碼"
+              value={verifyCode}
+              disabled={busy}
+              onChange={(e) => setVerifyCode(e.target.value)}
+            />
+          </label>
+        )}
+
+        {resetting && resetStep === 3 && (
+          <>
+            <label className="field">
+              <span>新密碼</span>
+              <input
+                type="password"
+                name="reset-password"
+                autoComplete="new-password"
+                placeholder="至少 8 個字元"
+                value={password}
+                disabled={busy}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>確認新密碼</span>
+              <input
+                type="password"
+                name="reset-confirm"
+                autoComplete="new-password"
+                placeholder="再輸入一次密碼"
+                value={confirmPassword}
+                disabled={busy}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </label>
+          </>
+        )}
+
         {message && (
           <p className="inline-error" role="alert">
             {message}
@@ -449,12 +593,24 @@ export function LoginScreen({
               ? registerStep === 2
                 ? '建立中…'
                 : '寄送中…'
-              : '登入中…'
+              : resetting
+                ? resetStep === 3
+                  ? '更新中…'
+                  : resetStep === 2
+                    ? '驗證中…'
+                    : '寄送中…'
+                : '登入中…'
             : registering
               ? registerStep === 2
                 ? '完成註冊'
                 : '寄送驗證碼'
-              : '登入'}
+              : resetting
+                ? resetStep === 3
+                  ? '更新密碼並登入'
+                  : resetStep === 2
+                    ? '驗證'
+                    : '寄送驗證碼'
+                : '登入'}
         </button>
 
         {registering && registerStep === 2 && (
@@ -468,19 +624,34 @@ export function LoginScreen({
           </button>
         )}
 
+        {resetting && resetStep === 2 && (
+          <button
+            type="button"
+            className="btn ghost wide"
+            disabled={busy}
+            onClick={() => void sendResetCode(true)}
+          >
+            重寄驗證碼
+          </button>
+        )}
+
         <p className="login-switch">
-          {registering ? (
-            <>
-              已有帳號？
-              <button type="button" className="text-link" onClick={() => switchMode('login')}>
-                登入
-              </button>
-            </>
-          ) : (
+          {mode === 'login' ? (
             <>
               還沒有帳號？
               <button type="button" className="text-link" onClick={() => switchMode('register')}>
                 註冊
+              </button>
+              <span className="login-switch-gap">·</span>
+              <button type="button" className="text-link" onClick={() => switchMode('reset')}>
+                忘記密碼
+              </button>
+            </>
+          ) : (
+            <>
+              回到
+              <button type="button" className="text-link" onClick={() => switchMode('login')}>
+                登入
               </button>
             </>
           )}

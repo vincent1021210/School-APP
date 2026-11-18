@@ -21,6 +21,11 @@ const ERROR_TEXT: Record<string, string> = {
   SIGNUP_TOO_MANY_ATTEMPTS: '錯誤次數過多，這組驗證碼已失效，請重新申請。',
   SIGNUP_TOO_SOON: '驗證碼剛剛才寄出，請等一分鐘再重新寄送。',
   SIGNUP_NOT_REQUESTED: '找不到這次的註冊資料，請重新填寫一次。',
+  RESET_CODE_INVALID: '驗證碼不正確，請確認後再試一次。',
+  RESET_CODE_EXPIRED: '驗證碼已過期，請重新申請一組。',
+  RESET_TOO_MANY_ATTEMPTS: '錯誤次數過多，這組驗證碼已失效，請重新申請。',
+  RESET_TOO_SOON: '驗證碼剛剛才寄出，請等一分鐘再重新寄送。',
+  RESET_TICKET_INVALID: '這次的重設流程已失效，請重新操作一次。',
   GOOGLE_LOGIN_NOT_CONFIGURED: '後端尚未設定 Google 登入，請改用帳密。',
   GOOGLE_TOKEN_MISSING: '沒有取得 Google 憑證，請重新嘗試。',
   GOOGLE_TOKEN_INVALID: 'Google 憑證驗證失敗，請重新嘗試。',
@@ -194,6 +199,36 @@ export async function registerWithPats(input: {
       password: input.password,
       remember: input.remember,
     },
+    null,
+  )
+  return acceptLoginResult(data)
+}
+
+export async function requestPatsReset(email: string): Promise<void> {
+  await patsRpc('requestReset', { email: email.trim() }, null)
+}
+
+export async function verifyPatsResetCode(
+  email: string,
+  code: string,
+): Promise<{ ticket: string }> {
+  const data = (await patsRpc(
+    'verifyResetCode',
+    { email: email.trim(), code: code.trim() },
+    null,
+  )) as { ticket?: string } | null
+  const ticket = String(data?.ticket || '').trim()
+  if (!ticket) throw new PatsAuthError('BAD_RESPONSE')
+  return { ticket }
+}
+
+export async function resetPatsPassword(
+  ticket: string,
+  newPassword: string,
+): Promise<{ token: string; user: AuthUser }> {
+  const data = await patsRpc(
+    'resetPassword',
+    { ticket: ticket.trim(), newPassword },
     null,
   )
   return acceptLoginResult(data)

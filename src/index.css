@@ -141,6 +141,10 @@ a {
   font-size: 0.92rem;
 }
 
+.login-switch-gap {
+  margin: 0 4px;
+}
+
 .text-link {
   border: 0;
   background: transparent;

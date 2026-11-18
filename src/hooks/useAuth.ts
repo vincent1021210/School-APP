@@ -6,15 +6,19 @@ import {
   logoutPats,
   PatsAuthError,
   registerWithPats,
+  requestPatsReset,
   requestPatsSignupCode,
+  resetPatsPassword,
   restorePatsSession,
+  verifyPatsResetCode,
 } from '../api/patsAuth'
+import type { AuthStatus, AuthUser } from '../types'
 
 export type AuthActionResult = {
   ok: boolean
   code?: string
+  ticket?: string
 }
-import type { AuthStatus, AuthUser } from '../types'
 
 function toAuthErrorMessage(err: unknown): string {
   if (err instanceof PatsAuthError) return err.message
@@ -153,6 +157,61 @@ export function useAuth() {
     [],
   )
 
+  const requestReset = useCallback(async (email: string) => {
+    setBusy(true)
+    setErrorMessage(null)
+    try {
+      await requestPatsReset(email)
+      return { ok: true } satisfies AuthActionResult
+    } catch (err) {
+      setErrorMessage(toAuthErrorMessage(err))
+      return {
+        ok: false,
+        code: err instanceof PatsAuthError ? err.code : 'UNKNOWN_ERROR',
+      } satisfies AuthActionResult
+    } finally {
+      setBusy(false)
+    }
+  }, [])
+
+  const verifyResetCode = useCallback(async (email: string, code: string) => {
+    setBusy(true)
+    setErrorMessage(null)
+    try {
+      const result = await verifyPatsResetCode(email, code)
+      return { ok: true, ticket: result.ticket } satisfies AuthActionResult
+    } catch (err) {
+      setErrorMessage(toAuthErrorMessage(err))
+      return {
+        ok: false,
+        code: err instanceof PatsAuthError ? err.code : 'UNKNOWN_ERROR',
+      } satisfies AuthActionResult
+    } finally {
+      setBusy(false)
+    }
+  }, [])
+
+  const resetPassword = useCallback(async (ticket: string, newPassword: string) => {
+    setBusy(true)
+    setErrorMessage(null)
+    try {
+      const result = await resetPatsPassword(ticket, newPassword)
+      setUser(result.user)
+      setStatus('authenticated')
+      return { ok: true } satisfies AuthActionResult
+    } catch (err) {
+      setUser(null)
+      setStatus('anonymous')
+      setErrorMessage(toAuthErrorMessage(err))
+      return {
+        ok: false,
+        code: err instanceof PatsAuthError ? err.code : 'UNKNOWN_ERROR',
+      } satisfies AuthActionResult
+    } finally {
+      setBusy(false)
+    }
+  }, [])
+
   const logout = useCallback(async () => {
     setBusy(true)
     setErrorMessage(null)
@@ -176,6 +235,9 @@ export function useAuth() {
     loginWithGoogle,
     requestSignupCode,
     register,
+    requestReset,
+    verifyResetCode,
+    resetPassword,
     logout,
     clearError: () => setErrorMessage(null),
   }
