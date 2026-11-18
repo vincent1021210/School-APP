@@ -34,3 +34,4 @@ tmp_*.py
 legacy-scrape.json
 summary.json
 sync-result.json
+mail-result.json

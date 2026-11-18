@@ -2,8 +2,9 @@ name: Daily today contact-book sync
 
 on:
   schedule:
-    # 台北 00:10 / 07:00 / 08:00 / 12:00 / 16:00 / 18:00 → 跨日與當天更新
+    # 台北 00:10 / 06:00 / 07:00 / 08:00 / 12:00 / 16:00 / 18:00
     - cron: '10 16 * * *' # 00:10 Taipei
+    - cron: '0 22 * * *'  # 06:00 Taipei（寄送聯絡簿）
     - cron: '0 23 * * *'  # 07:00 Taipei
     - cron: '0 0 * * *'   # 08:00 Taipei
     - cron: '0 4 * * *'   # 12:00 Taipei
@@ -54,4 +55,21 @@ jobs:
               raise SystemExit('scrape produced no notices')
           if summary.get('dateLabel') and scrape.get('dateLabel') and summary['dateLabel'] != scrape['dateLabel']:
               raise SystemExit('date mismatch between scrape and summary')
+          PY
+
+      - name: Email today's contact book at 06:00 Taipei
+        if: github.event.schedule == '0 22 * * *'
+        env:
+          GAS_EXEC_URL: https://script.google.com/macros/s/AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg/exec
+          SCRAPE_TOKEN: ${{ secrets.SCHOOL_APP_SYNC_TOKEN }}
+        run: |
+          set -euo pipefail
+          TOKEN="${SCRAPE_TOKEN:-school-app-legacy-scrape-v1}"
+          curl -fsSL --max-time 90 "${GAS_EXEC_URL}?action=sendDailyMail&token=${TOKEN}" | tee mail-result.json
+          python3 - <<'PY'
+          import json
+          data = json.load(open('mail-result.json', encoding='utf-8'))
+          if data.get('error') and not data.get('ok'):
+              raise SystemExit(f"mail error: {data}")
+          print('sent=', data.get('sent'), 'failed=', data.get('failed'), 'date=', data.get('dateLabel'))
           PY

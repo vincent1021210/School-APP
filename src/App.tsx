@@ -112,6 +112,7 @@ export default function App() {
             refreshing={refreshing}
             syncingLegacy={syncingLegacy}
             userLabel={auth.user?.displayName ?? null}
+            userEmail={auth.user?.email ?? null}
             onRefresh={() => {
               void refresh()
             }}

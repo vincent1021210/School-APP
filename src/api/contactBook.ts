@@ -268,4 +268,57 @@ export async function ensureTodayReady(force = false): Promise<LegacySyncResult>
   )
 }
 
+export type MailSubscribeResult = {
+  ok: boolean
+  subscribed?: boolean
+  email?: string
+  message?: string
+}
+
+function parseMailResult(parsed: unknown, fallback: string): MailSubscribeResult {
+  if (!parsed || typeof parsed !== 'object') {
+    throw new ContactBookApiError('回傳格式無法辨識', 'parse')
+  }
+  const data = parsed as Record<string, unknown>
+  if (data.error && data.ok === false) {
+    throw new ContactBookApiError(
+      typeof data.message === 'string' ? data.message : fallback,
+      'http',
+    )
+  }
+  return {
+    ok: data.ok !== false,
+    subscribed: Boolean(data.subscribed),
+    email: typeof data.email === 'string' ? data.email : undefined,
+    message: typeof data.message === 'string' ? data.message : undefined,
+  }
+}
+
+export async function subscribeDailyMail(
+  email: string,
+  note?: string,
+): Promise<MailSubscribeResult> {
+  return parseMailResult(
+    await fetchGasAction('subscribeMail', {
+      email: email.trim(),
+      note: note ?? '',
+    }),
+    '訂閱失敗',
+  )
+}
+
+export async function unsubscribeDailyMail(email: string): Promise<MailSubscribeResult> {
+  return parseMailResult(
+    await fetchGasAction('unsubscribeMail', { email: email.trim() }),
+    '取消訂閱失敗',
+  )
+}
+
+export async function fetchMailStatus(email: string): Promise<MailSubscribeResult> {
+  return parseMailResult(
+    await fetchGasAction('mailStatus', { email: email.trim() }),
+    '無法讀取訂閱狀態',
+  )
+}
+
 export { GAS_EXEC_URL }

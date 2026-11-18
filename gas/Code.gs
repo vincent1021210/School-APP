@@ -16,6 +16,7 @@ var CACHE_TTL_SEC = 120;
 var SHEET_NOTICES = '今日事項';
 var SHEET_SUBJECTS = '成績科目';
 var SHEET_META = '設定';
+var SHEET_MAIL = '郵件訂閱';
 /** 舊版放學大螢幕 Web App（來源） */
 var LEGACY_EXEC_URL =
   'https://script.google.com/macros/s/AKfycbwBE0IVr9JuF92lpHMTUQiTgIpjxBYZWidAXHEfICwumlHggm31kfbD3Y3_mlznVuES/exec';
@@ -94,6 +95,21 @@ function handleApi_(action, params) {
     }
     if (action === 'installDailySyncTrigger') {
       return json_(installDailySyncTrigger(), callback);
+    }
+    if (action === 'subscribeMail') {
+      return json_(subscribeMail_(params.email, params.note), callback);
+    }
+    if (action === 'unsubscribeMail') {
+      return json_(unsubscribeMail_(params.email), callback);
+    }
+    if (action === 'mailStatus') {
+      return json_(mailStatus_(params.email), callback);
+    }
+    if (action === 'sendDailyMail' || action === 'sendDailyContactBook') {
+      if (String(params.token || '') !== getScrapeToken_()) {
+        return json_({ ok: false, error: 'AUTH', message: '同步密鑰不正確' }, callback);
+      }
+      return json_(sendDailyContactBookMail_(), callback);
     }
     return json_({ error: 'unknown_action', action: action }, callback);
   } catch (err) {
@@ -236,6 +252,15 @@ function ensureSchema_() {
     ensureMetaKey_(meta, '舊版公佈欄網址', LEGACY_EXEC_URL);
     ensureMetaKey_(meta, '舊版試算表ID', '');
     ensureMetaKey_(meta, '同步密鑰', DEFAULT_SCRAPE_TOKEN);
+  }
+
+  var mail = ss.getSheetByName(SHEET_MAIL);
+  if (!mail) {
+    mail = ss.insertSheet(SHEET_MAIL);
+  }
+  if (mail.getLastRow() === 0) {
+    mail.getRange(1, 1, 1, 4).setValues([['電子郵件', '啟用', '備註', '更新時間']]);
+    mail.setFrozenRows(1);
   }
 
   // 移除預設空白「工作表1」若已有業務表且它是空的
@@ -957,6 +982,206 @@ function removeDailySyncTriggers_() {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
+}
+
+function normalizeEmail_(raw) {
+  return String(raw || '').trim().toLowerCase();
+}
+
+function isValidEmail_(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function getMailSheet_() {
+  ensureSchema_();
+  return getSpreadsheet_().getSheetByName(SHEET_MAIL);
+}
+
+function findMailRow_(sheet, email) {
+  var last = sheet.getLastRow();
+  if (last < 2) return 0;
+  var values = sheet.getRange(2, 1, last - 1, 1).getDisplayValues();
+  for (var i = 0; i < values.length; i++) {
+    if (normalizeEmail_(values[i][0]) === email) return i + 2;
+  }
+  return 0;
+}
+
+function subscribeMail_(rawEmail, note) {
+  var email = normalizeEmail_(rawEmail);
+  if (!isValidEmail_(email)) {
+    return { ok: false, error: 'EMAIL_INVALID', message: '請輸入有效的 Gmail／電子郵件' };
+  }
+  var sheet = getMailSheet_();
+  var now = new Date().toISOString();
+  var row = findMailRow_(sheet, email);
+  var label = String(note || '').trim();
+  if (row) {
+    sheet.getRange(row, 2, 1, 3).setValues([['1', label, now]]);
+  } else {
+    sheet.appendRow([email, '1', label, now]);
+  }
+  return {
+    ok: true,
+    subscribed: true,
+    email: email,
+    message: '已開啟每天 06:00 寄送今日聯絡簿',
+  };
+}
+
+function unsubscribeMail_(rawEmail) {
+  var email = normalizeEmail_(rawEmail);
+  if (!isValidEmail_(email)) {
+    return { ok: false, error: 'EMAIL_INVALID', message: '請輸入有效的 Gmail／電子郵件' };
+  }
+  var sheet = getMailSheet_();
+  var row = findMailRow_(sheet, email);
+  if (row) {
+    sheet.getRange(row, 2, 1, 3).setValues([['0', sheet.getRange(row, 3).getDisplayValue(), new Date().toISOString()]]);
+  }
+  return {
+    ok: true,
+    subscribed: false,
+    email: email,
+    message: '已停止每日寄送',
+  };
+}
+
+function mailStatus_(rawEmail) {
+  var email = normalizeEmail_(rawEmail);
+  if (!isValidEmail_(email)) {
+    return { ok: true, subscribed: false, email: email };
+  }
+  var sheet = getMailSheet_();
+  var row = findMailRow_(sheet, email);
+  if (!row) return { ok: true, subscribed: false, email: email };
+  var enabled = String(sheet.getRange(row, 2).getDisplayValue() || '').trim();
+  return {
+    ok: true,
+    subscribed: enabled === '1' || enabled.toLowerCase() === 'true',
+    email: email,
+  };
+}
+
+function listActiveMailSubscribers_() {
+  var sheet = getMailSheet_();
+  var last = sheet.getLastRow();
+  if (last < 2) return [];
+  var values = sheet.getRange(2, 1, last - 1, 2).getDisplayValues();
+  var out = [];
+  var seen = {};
+  for (var i = 0; i < values.length; i++) {
+    var email = normalizeEmail_(values[i][0]);
+    var enabled = String(values[i][1] || '').trim();
+    if (!isValidEmail_(email) || seen[email]) continue;
+    if (enabled !== '1' && enabled.toLowerCase() !== 'true') continue;
+    seen[email] = true;
+    out.push(email);
+  }
+  return out;
+}
+
+function buildDailyMailBodies_(summary) {
+  var dateLabel = summary && summary.dateLabel ? summary.dateLabel : '';
+  var notices = (summary && summary.notices) || [];
+  var subjects = (summary && summary.subjects) || [];
+  var lines = [];
+  lines.push('家庭聯絡簿' + (dateLabel ? '（' + dateLabel + '）' : ''));
+  lines.push('');
+  lines.push('今日聯絡事項');
+  if (!notices.length) {
+    lines.push('（今日尚無聯絡事項）');
+  } else {
+    for (var i = 0; i < notices.length; i++) {
+      var content = notices[i] && notices[i].content != null ? notices[i].content : notices[i];
+      lines.push(i + 1 + '. ' + String(content || ''));
+    }
+  }
+  lines.push('');
+  lines.push('今日成績登載科目：' + (subjects.length ? subjects.join('、') : '無'));
+  lines.push('');
+  lines.push('— 班級家庭聯絡簿');
+
+  var htmlItems = notices.length
+    ? notices
+        .map(function (n, idx) {
+          var c = n && n.content != null ? n.content : n;
+          return '<li>' + escapeMailHtml_(String(c || '')) + '</li>';
+        })
+        .join('')
+    : '<li>（今日尚無聯絡事項）</li>';
+
+  var html = [
+    '<div style="font-family:system-ui,-apple-system,\'Noto Sans TC\',sans-serif;max-width:480px;color:#1f2937;line-height:1.7">',
+    '<h2 style="margin:0 0 8px;color:#0f766e">今日放學公佈欄</h2>',
+    dateLabel ? '<p style="color:#6b7280;margin:0 0 16px">' + escapeMailHtml_(dateLabel) + '</p>' : '',
+    '<p style="font-weight:700;margin:0 0 8px">今日聯絡事項</p>',
+    '<ol style="margin:0 0 16px;padding-left:1.2rem">' + htmlItems + '</ol>',
+    '<p style="font-weight:700;margin:0 0 4px">今日成績登載科目</p>',
+    '<p style="color:#0f766e;margin:0 0 16px">' +
+      escapeMailHtml_(subjects.length ? subjects.join('、') : '無') +
+      '</p>',
+    '<p style="color:#6b7280;font-size:13px">每天 06:00 自動寄送 · 班級家庭聯絡簿</p>',
+    '</div>',
+  ].join('');
+
+  return {
+    subject: '家庭聯絡簿' + (dateLabel ? ' ' + dateLabel : ''),
+    text: lines.join('\n'),
+    html: html,
+  };
+}
+
+function escapeMailHtml_(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** GitHub Actions 台北 06:00 或手動呼叫 */
+function sendDailyContactBookMail_() {
+  var subscribers = listActiveMailSubscribers_();
+  var summary = getDailySummaryFast_();
+  if (!subscribers.length) {
+    return {
+      ok: true,
+      sent: 0,
+      failed: 0,
+      skipped: 'no_subscribers',
+      dateLabel: summary.dateLabel || '',
+      noticeCount: (summary.notices || []).length,
+      message: '尚無已輸入 Gmail 的訂閱者',
+    };
+  }
+
+  var bodies = buildDailyMailBodies_(summary);
+  var sent = 0;
+  var failed = 0;
+  for (var i = 0; i < subscribers.length; i++) {
+    try {
+      MailApp.sendEmail({
+        to: subscribers[i],
+        subject: bodies.subject,
+        body: bodies.text,
+        htmlBody: bodies.html,
+        name: '班級家庭聯絡簿',
+      });
+      sent++;
+    } catch (err) {
+      failed++;
+    }
+  }
+  return {
+    ok: true,
+    sent: sent,
+    failed: failed,
+    dateLabel: summary.dateLabel || '',
+    noticeCount: (summary.notices || []).length,
+    subjectCount: (summary.subjects || []).length,
+    message: '已寄出 ' + sent + ' 封今日聯絡簿',
+  };
 }
 
 function json_(obj, callbackName) {
