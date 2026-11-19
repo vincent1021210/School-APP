@@ -1144,6 +1144,18 @@ function escapeMailHtml_(text) {
     .replace(/"/g, '&quot;');
 }
 
+function getEffectiveMailUser_() {
+  try {
+    return normalizeEmail_(Session.getEffectiveUser().getEmail());
+  } catch (err) {
+    return '';
+  }
+}
+
+function isAllowedMailSender_() {
+  return getEffectiveMailUser_() === normalizeEmail_(MAIL_FROM);
+}
+
 /** 編輯器請選這個執行（會跳出授權；允許後立刻寄給已訂閱信箱） */
 function sendDailyMailNow() {
   // 不可 try/catch：沒授權時必須讓編輯器跳出「審查權限」
@@ -1167,6 +1179,10 @@ function removeDailyMailTriggers_() {
 
 /** 用 patspats799 這個專案執行一次：每天台北 06:00 寄聯絡簿 */
 function installDailyMailTrigger() {
+  if (!isAllowedMailSender_()) {
+    removeDailyMailTriggers_();
+    throw new Error('請用 ' + MAIL_FROM + ' 的專案安裝寄信觸發器，原本帳號不會寄信');
+  }
   MailApp.getRemainingDailyQuota();
   removeDailyMailTriggers_();
   ScriptApp.newTrigger('sendDailyMailNow')
@@ -1182,8 +1198,29 @@ function installDailyMailTrigger() {
   };
 }
 
+/** 在原本的「學校APP」專案執行：刪掉寄信觸發器，避免兩個帳號都寄 */
+function disableDailyMailFromThisProject() {
+  removeDailyMailTriggers_();
+  return {
+    ok: true,
+    actor: getEffectiveMailUser_(),
+    message: '已移除此專案的每日寄信觸發器',
+  };
+}
+
 /** GitHub Actions 台北 06:00 或手動呼叫 */
 function sendDailyContactBookMail_() {
+  if (!isAllowedMailSender_()) {
+    return {
+      ok: true,
+      sent: 0,
+      failed: 0,
+      skipped: 'wrong_sender',
+      actor: getEffectiveMailUser_(),
+      from: MAIL_FROM,
+      message: '已略過：僅 ' + MAIL_FROM + ' 可寄信',
+    };
+  }
   var subscribers = listActiveMailSubscribers_();
   var summary = getDailySummaryFast_();
   if (!subscribers.length) {
