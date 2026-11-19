@@ -1144,9 +1144,15 @@ function escapeMailHtml_(text) {
     .replace(/"/g, '&quot;');
 }
 
-/** 編輯器請選這個執行（一次授權寄信，並立刻寄給已訂閱信箱） */
+/** 編輯器請選這個執行（會跳出授權；允許後立刻寄給已訂閱信箱） */
 function sendDailyMailNow() {
-  return sendDailyContactBookMail_();
+  // 不可 try/catch：沒授權時必須讓編輯器跳出「審查權限」
+  MailApp.getRemainingDailyQuota();
+  var result = sendDailyContactBookMail_();
+  if (!result || result.failed) {
+    throw new Error(result && result.message ? result.message : '寄信失敗');
+  }
+  return result;
 }
 
 /** GitHub Actions 台北 06:00 或手動呼叫 */
