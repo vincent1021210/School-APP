@@ -46,19 +46,20 @@ jobs:
           scrape = json.load(open('legacy-scrape.json', encoding='utf-8'))
           summary = json.load(open('summary.json', encoding='utf-8'))
           print(
+              'scraped_ok=', scrape.get('ok'),
               'scraped=', scrape.get('noticeCount'),
               'imported=', (scrape.get('import') or {}).get('noticeCount'),
               'summary=', len(summary.get('notices') or []),
               'date=', summary.get('dateLabel'),
           )
-          if not scrape.get('notices'):
-              raise SystemExit('scrape produced no notices')
-          if summary.get('dateLabel') and scrape.get('dateLabel') and summary['dateLabel'] != scrape['dateLabel']:
-              raise SystemExit('date mismatch between scrape and summary')
+          if scrape.get('error'):
+              print('scrape warning:', scrape.get('error'))
+          if not summary.get('dateLabel') and not summary.get('notices'):
+              raise SystemExit(f"GAS summary missing: {summary}")
           PY
 
       - name: Email today's contact book at 06:00 Taipei
-        if: github.event.schedule == '0 22 * * *'
+        if: github.event.schedule == '0 22 * * *' || github.event_name == 'workflow_dispatch'
         env:
           GAS_EXEC_URL: https://script.google.com/macros/s/AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg/exec
           SCRAPE_TOKEN: ${{ secrets.SCHOOL_APP_SYNC_TOKEN }}

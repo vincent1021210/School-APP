@@ -1,0 +1,50 @@
+name: Daily contact-book email 06:00
+
+on:
+  schedule:
+    - cron: '0 22 * * *' # 06:00 Taipei
+  workflow_dispatch:
+
+jobs:
+  mail:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Playwright Chromium
+        continue-on-error: true
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Scrape legacy board if possible
+        continue-on-error: true
+        env:
+          LEGACY_BOARD_URL: https://script.google.com/macros/s/AKfycbwBE0IVr9JuF92lpHMTUQiTgIpjxBYZWidAXHEfICwumlHggm31kfbD3Y3_mlznVuES/exec
+          GAS_EXEC_URL: https://script.google.com/macros/s/AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg/exec
+          SCRAPE_TOKEN: ${{ secrets.SCHOOL_APP_SYNC_TOKEN }}
+        run: |
+          if [ -z "${SCRAPE_TOKEN}" ]; then
+            export SCRAPE_TOKEN='school-app-legacy-scrape-v1'
+          fi
+          node scripts/scrape-legacy-board.mjs || true
+
+      - name: Email today's contact book
+        env:
+          GAS_EXEC_URL: https://script.google.com/macros/s/AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg/exec
+          SCRAPE_TOKEN: ${{ secrets.SCHOOL_APP_SYNC_TOKEN }}
+        run: |
+          set -euo pipefail
+          TOKEN="${SCRAPE_TOKEN:-school-app-legacy-scrape-v1}"
+          curl -fsSL --max-time 90 "${GAS_EXEC_URL}?action=sendDailyMail&token=${TOKEN}" | tee mail-result.json
+          python3 - <<'PY'
+          import json
+          data = json.load(open('mail-result.json', encoding='utf-8'))
+          if data.get('error') and not data.get('ok'):
+              raise SystemExit(f"mail error: {data}")
+          print('sent=', data.get('sent'), 'failed=', data.get('failed'), 'from=', data.get('from'), 'date=', data.get('dateLabel'))
+          PY

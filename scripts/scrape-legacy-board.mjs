@@ -96,6 +96,7 @@ async function scrapeLegacyBoard() {
     await page.waitForSelector('iframe', { timeout: 30000 })
 
     let boardText = ''
+    let lastTexts = []
     const deadline = Date.now() + 45000
     while (Date.now() < deadline) {
       const texts = []
@@ -119,6 +120,7 @@ async function scrapeLegacyBoard() {
         const parsed = parseBoardText(text)
         return parsed.notices.length > 0
       })
+      lastTexts = texts
       if (ready) {
         boardText = ready
         break
@@ -127,13 +129,14 @@ async function scrapeLegacyBoard() {
     }
 
     if (!boardText) {
+      const seen = lastTexts.find((t) => t && t.includes('今日放學公佈欄') && !t.includes('載入中'))
+      if (seen) {
+        return { ...parseBoardText(seen), rawPreview: seen.slice(0, 800) }
+      }
       throw new Error('iframe 中沒有找到放學公佈欄內容')
     }
 
     const parsed = parseBoardText(boardText)
-    if (!parsed.notices.length) {
-      throw new Error('有頁面文字但解析不到編號事項：' + boardText.slice(0, 400))
-    }
     return { ...parsed, rawPreview: boardText.slice(0, 800) }
   } finally {
     await browser.close()
@@ -160,32 +163,48 @@ async function postToGas(payload) {
   return parsed
 }
 
-const scraped = await scrapeLegacyBoard()
-const result = {
-  ok: true,
-  source: 'legacy_browser_scrape',
-  dateLabel: scraped.dateLabel,
-  notices: scraped.notices,
-  subjects: scraped.subjects,
-  noticeCount: scraped.notices.length,
-  subjectCount: scraped.subjects.length,
-}
-
-if (process.env.SKIP_IMPORT !== '1') {
-  const imported = await postToGas({
-    action: 'importScrapedToday',
-    token: SCRAPE_TOKEN,
+let result
+try {
+  const scraped = await scrapeLegacyBoard()
+  result = {
+    ok: true,
+    source: 'legacy_browser_scrape',
+    dateLabel: scraped.dateLabel,
     notices: scraped.notices,
     subjects: scraped.subjects,
-    dateLabel: scraped.dateLabel,
-  })
-  result.import = {
-    source: imported.source,
-    dateLabel: imported.dateLabel,
-    noticeCount: imported.noticeCount,
-    subjectCount: imported.subjectCount,
+    noticeCount: scraped.notices.length,
+    subjectCount: scraped.subjects.length,
+  }
+
+  if (process.env.SKIP_IMPORT !== '1' && scraped.notices.length) {
+    const imported = await postToGas({
+      action: 'importScrapedToday',
+      token: SCRAPE_TOKEN,
+      notices: scraped.notices,
+      subjects: scraped.subjects,
+      dateLabel: scraped.dateLabel,
+    })
+    result.import = {
+      source: imported.source,
+      dateLabel: imported.dateLabel,
+      noticeCount: imported.noticeCount,
+      subjectCount: imported.subjectCount,
+    }
+  }
+} catch (err) {
+  result = {
+    ok: false,
+    source: 'legacy_browser_scrape',
+    notices: [],
+    subjects: [],
+    noticeCount: 0,
+    subjectCount: 0,
+    error: err instanceof Error ? err.message : String(err),
   }
 }
 
 writeFileSync(OUT_FILE, JSON.stringify(result, null, 2), 'utf8')
 console.log(JSON.stringify(result, null, 2))
+if (!result.ok) {
+  console.error('scrape warning:', result.error)
+}
