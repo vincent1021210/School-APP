@@ -184,7 +184,7 @@ export function SyncScreen({
             disabled={busy}
             style={{ marginTop: '0.75rem' }}
           >
-            {syncingLegacy ? '同步中…' : '同步／準備今日聯絡簿'}
+            {syncingLegacy ? '同步中…' : '再同步一次今日聯絡簿'}
           </button>
         )}
 

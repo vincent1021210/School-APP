@@ -14,15 +14,22 @@ import type { DailySummary, FetchStatus } from '../types'
 
 const POLL_MS = 15 * 60 * 1000
 
-function applySyncMessage(source?: string, message?: string | null): string | null {
+function applySyncMessage(
+  source?: string,
+  message?: string | null,
+  noticeCount?: number,
+): string | null {
+  const hasToday = (noticeCount ?? 0) > 0
+  // GAS 讀不到舊版網頁時仍會保留當天資料；有資料就不要當成錯誤嚇家長
+  if (source === 'unreachable' && hasToday) return null
   if (
-    source === 'unreachable' ||
     source === 'empty' ||
     source === 'legacy_sheet_error' ||
     source === 'rolled_forward'
   ) {
     return message ?? null
   }
+  if (source === 'unreachable') return message ?? null
   return null
 }
 
@@ -95,7 +102,11 @@ export function useDailySummary(enabled = true) {
       markEnsuredToday()
       dayRef.current = localTodayKey()
     }
-    const msg = applySyncMessage(result.source, result.message)
+    const msg = applySyncMessage(
+      result.source,
+      result.message,
+      result.noticeCount ?? result.summary?.notices.length,
+    )
     if (msg) setErrorMessage(msg)
     else if (result.summary) setErrorMessage(null)
     return result
