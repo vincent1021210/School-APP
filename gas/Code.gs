@@ -1164,22 +1164,29 @@ function sendDailyContactBookMail_() {
   var sent = 0;
   var failed = 0;
   var from = getMailFrom_();
+  var errors = [];
   for (var i = 0; i < subscribers.length; i++) {
     try {
       sendSchoolMail_(subscribers[i], bodies, from);
       sent++;
     } catch (err) {
       failed++;
+      errors.push(
+        subscribers[i] + ': ' + String(err && err.message ? err.message : err),
+      );
     }
   }
   return {
-    ok: true,
+    ok: sent > 0,
     sent: sent,
     failed: failed,
+    errors: errors,
     dateLabel: summary.dateLabel || '',
     noticeCount: (summary.notices || []).length,
     subjectCount: (summary.subjects || []).length,
-    message: '已寄出 ' + sent + ' 封今日聯絡簿',
+    message: sent
+      ? '已寄出 ' + sent + ' 封今日聯絡簿'
+      : errors[0] || '寄信失敗，請在 Apps Script 授權 Gmail',
     from: from,
   };
 }
@@ -1189,22 +1196,19 @@ function getMailFrom_() {
 }
 
 function sendSchoolMail_(to, bodies, from) {
-  var options = {
-    htmlBody: bodies.html,
-    name: '班級家庭聯絡簿',
-    replyTo: from,
-  };
+  var lastErr = null;
   try {
-    options.from = from;
-    GmailApp.sendEmail(to, bodies.subject, bodies.text, options);
+    GmailApp.sendEmail(to, bodies.subject, bodies.text, {
+      htmlBody: bodies.html,
+      name: '班級家庭聯絡簿',
+      from: from,
+      replyTo: from,
+    });
     return;
   } catch (err) {
-    delete options.from;
+    lastErr = err;
   }
   try {
-    GmailApp.sendEmail(to, bodies.subject, bodies.text, options);
-    return;
-  } catch (err2) {
     MailApp.sendEmail({
       to: to,
       subject: bodies.subject,
@@ -1213,7 +1217,11 @@ function sendSchoolMail_(to, bodies, from) {
       name: '班級家庭聯絡簿',
       replyTo: from,
     });
+    return;
+  } catch (err2) {
+    lastErr = err2;
   }
+  throw lastErr || new Error('MAIL_SEND_FAILED');
 }
 
 function json_(obj, callbackName) {
