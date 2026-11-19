@@ -33,18 +33,5 @@ jobs:
           fi
           node scripts/scrape-legacy-board.mjs || true
 
-      - name: Email today's contact book
-        env:
-          GAS_EXEC_URL: https://script.google.com/macros/s/AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg/exec
-          SCRAPE_TOKEN: ${{ secrets.SCHOOL_APP_SYNC_TOKEN }}
-        run: |
-          set -euo pipefail
-          TOKEN="${SCRAPE_TOKEN:-school-app-legacy-scrape-v1}"
-          curl -fsSL --max-time 90 "${GAS_EXEC_URL}?action=sendDailyMail&token=${TOKEN}" | tee mail-result.json
-          python3 - <<'PY'
-          import json
-          data = json.load(open('mail-result.json', encoding='utf-8'))
-          if data.get('error') and not data.get('ok'):
-              raise SystemExit(f"mail error: {data}")
-          print('sent=', data.get('sent'), 'failed=', data.get('failed'), 'from=', data.get('from'), 'date=', data.get('dateLabel'))
-          PY
+      - name: Skip GitHub mail (sent by Apps Script trigger)
+        run: echo "Daily mail is sent by the patspats799 Apps Script 06:00 trigger."

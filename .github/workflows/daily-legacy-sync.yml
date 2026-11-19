@@ -58,19 +58,4 @@ jobs:
               raise SystemExit(f"GAS summary missing: {summary}")
           PY
 
-      - name: Email today's contact book at 06:00 Taipei
-        if: github.event.schedule == '0 22 * * *' || github.event_name == 'workflow_dispatch'
-        env:
-          GAS_EXEC_URL: https://script.google.com/macros/s/AKfycbzDgh4ktlDeGvf8RudOBtroV2QxvP8f0HoLn2xLN9nweESntGMSYfM836LEADbop60KJg/exec
-          SCRAPE_TOKEN: ${{ secrets.SCHOOL_APP_SYNC_TOKEN }}
-        run: |
-          set -euo pipefail
-          TOKEN="${SCRAPE_TOKEN:-school-app-legacy-scrape-v1}"
-          curl -fsSL --max-time 90 "${GAS_EXEC_URL}?action=sendDailyMail&token=${TOKEN}" | tee mail-result.json
-          python3 - <<'PY'
-          import json
-          data = json.load(open('mail-result.json', encoding='utf-8'))
-          if data.get('error') and not data.get('ok'):
-              raise SystemExit(f"mail error: {data}")
-          print('sent=', data.get('sent'), 'failed=', data.get('failed'), 'date=', data.get('dateLabel'))
-          PY
+      # 每日寄信改由 patspats799 的 Apps Script 時間觸發器處理，避免重複寄出

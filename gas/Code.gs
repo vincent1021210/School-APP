@@ -1155,6 +1155,33 @@ function sendDailyMailNow() {
   return result;
 }
 
+function removeDailyMailTriggers_() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    var name = triggers[i].getHandlerFunction();
+    if (name === 'sendDailyMailNow' || name === 'sendDailyContactBookMail_') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+}
+
+/** 用 patspats799 這個專案執行一次：每天台北 06:00 寄聯絡簿 */
+function installDailyMailTrigger() {
+  MailApp.getRemainingDailyQuota();
+  removeDailyMailTriggers_();
+  ScriptApp.newTrigger('sendDailyMailNow')
+    .timeBased()
+    .atHour(6)
+    .everyDays(1)
+    .inTimezone('Asia/Taipei')
+    .create();
+  return {
+    ok: true,
+    message: '已安裝每天 06:00（Asia/Taipei）寄信觸發器',
+    handler: 'sendDailyMailNow',
+  };
+}
+
 /** GitHub Actions 台北 06:00 或手動呼叫 */
 function sendDailyContactBookMail_() {
   var subscribers = listActiveMailSubscribers_();
