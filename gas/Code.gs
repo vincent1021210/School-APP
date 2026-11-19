@@ -1144,6 +1144,11 @@ function escapeMailHtml_(text) {
     .replace(/"/g, '&quot;');
 }
 
+/** 編輯器請選這個執行（一次授權寄信，並立刻寄給已訂閱信箱） */
+function sendDailyMailNow() {
+  return sendDailyContactBookMail_();
+}
+
 /** GitHub Actions 台北 06:00 或手動呼叫 */
 function sendDailyContactBookMail_() {
   var subscribers = listActiveMailSubscribers_();
