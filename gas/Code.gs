@@ -1146,14 +1146,21 @@ function escapeMailHtml_(text) {
 
 function getEffectiveMailUser_() {
   try {
-    return normalizeEmail_(Session.getEffectiveUser().getEmail());
-  } catch (err) {
-    return '';
-  }
+    var effective = Session.getEffectiveUser().getEmail();
+    if (effective) return normalizeEmail_(effective);
+  } catch (err) {}
+  try {
+    var active = Session.getActiveUser().getEmail();
+    if (active) return normalizeEmail_(active);
+  } catch (err2) {}
+  return '';
 }
 
 function isAllowedMailSender_() {
-  return getEffectiveMailUser_() === normalizeEmail_(MAIL_FROM);
+  var actor = getEffectiveMailUser_();
+  // 時間觸發器有時讀不到信箱；只擋「明確是別的 Google 帳號」
+  if (!actor) return true;
+  return actor === normalizeEmail_(MAIL_FROM);
 }
 
 /** 編輯器請選這個執行（會跳出授權；允許後立刻寄給已訂閱信箱） */
@@ -1161,7 +1168,7 @@ function sendDailyMailNow() {
   // 不可 try/catch：沒授權時必須讓編輯器跳出「審查權限」
   MailApp.getRemainingDailyQuota();
   var result = sendDailyContactBookMail_();
-  if (!result || result.failed) {
+  if (!result || result.failed || !result.sent) {
     throw new Error(result && result.message ? result.message : '寄信失敗');
   }
   return result;
