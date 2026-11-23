@@ -127,7 +127,10 @@ export function LoginScreen({
   const [googleHint, setGoogleHint] = useState<string | null>(null)
   const googleSlotRef = useRef<HTMLDivElement | null>(null)
   const onGoogleLoginRef = useRef(onGoogleLogin)
-  onGoogleLoginRef.current = onGoogleLogin
+
+  useEffect(() => {
+    onGoogleLoginRef.current = onGoogleLogin
+  }, [onGoogleLogin])
 
   const showGoogle = mode === 'login' || (mode === 'register' && registerStep === 1)
 

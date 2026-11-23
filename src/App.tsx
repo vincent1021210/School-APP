@@ -18,8 +18,11 @@ export default function App() {
     lastSyncAt,
     refreshing,
     syncingLegacy,
+    changingDay,
+    changeDayMessage,
     refresh,
     syncLegacy,
+    changeDay,
     noticeCount,
     subjectCount,
   } = useDailySummary(auth.authenticated)
@@ -99,7 +102,12 @@ export default function App() {
             summary={summary}
             status={status}
             errorMessage={errorMessage}
+            changingDay={changingDay}
+            changeDayMessage={changeDayMessage}
             onGoSync={() => setTab('sync')}
+            onChangeDay={() => {
+              void changeDay()
+            }}
           />
         )}
         {tab === 'sync' && (
@@ -111,6 +119,7 @@ export default function App() {
             subjectCount={subjectCount}
             refreshing={refreshing}
             syncingLegacy={syncingLegacy}
+            changingDay={changingDay}
             userLabel={auth.user?.displayName ?? null}
             userEmail={auth.user?.email ?? null}
             onRefresh={() => {
@@ -118,6 +127,9 @@ export default function App() {
             }}
             onSyncFromLegacy={() => {
               void syncLegacy()
+            }}
+            onChangeDay={() => {
+              void changeDay()
             }}
             onLogout={() => {
               void auth.logout()

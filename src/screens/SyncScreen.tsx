@@ -18,10 +18,12 @@ type Props = {
   subjectCount: number
   refreshing?: boolean
   syncingLegacy?: boolean
+  changingDay?: boolean
   userLabel?: string | null
   userEmail?: string | null
   onRefresh: () => void
   onSyncFromLegacy?: () => void
+  onChangeDay?: () => void
   onLogout?: () => void
 }
 
@@ -40,13 +42,15 @@ export function SyncScreen({
   subjectCount,
   refreshing = false,
   syncingLegacy = false,
+  changingDay = false,
   userLabel = null,
   userEmail = null,
   onRefresh,
   onSyncFromLegacy,
+  onChangeDay,
   onLogout,
 }: Props) {
-  const busy = status === 'loading' || refreshing || syncingLegacy
+  const busy = status === 'loading' || refreshing || syncingLegacy || changingDay
   const [mail, setMail] = useState(() => {
     try {
       return localStorage.getItem(MAIL_KEY) || userEmail || ''
@@ -175,6 +179,18 @@ export function SyncScreen({
         >
           {refreshing || status === 'loading' ? '更新中…' : '立即更新'}
         </button>
+
+        {onChangeDay && (
+          <button
+            type="button"
+            className="btn primary wide"
+            onClick={onChangeDay}
+            disabled={busy}
+            style={{ marginTop: '0.75rem' }}
+          >
+            {changingDay ? '正在換成當天…' : '換天'}
+          </button>
+        )}
 
         {onSyncFromLegacy && (
           <button

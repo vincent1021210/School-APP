@@ -61,19 +61,47 @@ export function localTodayKey(): string {
     .replace(/-/g, '/')
 }
 
+export function normalizeDateKey(raw?: string | null): string {
+  const text = String(raw || '').trim()
+  if (!text) return ''
+  const ymd = text.match(/^(\d{4})[/.\\-](\d{1,2})[/.\\-](\d{1,2})$/)
+  if (ymd) {
+    return `${ymd[1]}/${ymd[2].padStart(2, '0')}/${ymd[3].padStart(2, '0')}`
+  }
+  const cn = text.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/)
+  if (cn) {
+    return `${cn[1]}/${cn[2].padStart(2, '0')}/${cn[3].padStart(2, '0')}`
+  }
+  return text
+}
+
+export function isSameCalendarDay(dateLabel?: string | null, dayKey = localTodayKey()): boolean {
+  const key = normalizeDateKey(dateLabel)
+  return Boolean(key) && key === dayKey
+}
+
 export function loadCachedSummary(): DailySummary | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
     const summary = normalizeSummary(JSON.parse(raw))
     // 跨日後丟棄舊快取，避免畫面卡在昨天
-    if (summary.dateLabel && summary.dateLabel !== localTodayKey()) {
+    if (summary.dateLabel && !isSameCalendarDay(summary.dateLabel)) {
       localStorage.removeItem(STORAGE_KEY)
       return null
     }
     return summary
   } catch {
     return null
+  }
+}
+
+export function clearCachedSummary(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(STORAGE_META_KEY)
+  } catch {
+    /* ignore */
   }
 }
 
@@ -210,6 +238,8 @@ export type LegacySyncResult = {
   noticeCount?: number
   subjectCount?: number
   summary?: DailySummary
+  skippedWrite?: boolean
+  replaced?: boolean
 }
 
 function parseSyncResult(parsed: unknown, fallbackError: string): LegacySyncResult {
@@ -241,6 +271,8 @@ function parseSyncResult(parsed: unknown, fallbackError: string): LegacySyncResu
         ? data.subjectCount
         : summary?.subjects.length,
     summary,
+    skippedWrite: Boolean(data.skippedWrite),
+    replaced: data.replaced === true,
   }
 }
 
@@ -249,6 +281,17 @@ export async function syncFromLegacyBoard(): Promise<LegacySyncResult> {
   return parseSyncResult(
     await fetchGasAction('syncFromLegacy', undefined, 45000),
     '從公佈欄同步失敗',
+  )
+}
+
+/**
+ * 換天：向後端取當天資料，依日期覆寫聯絡簿（其他日期列保留）。
+ */
+export async function changeContactBookDay(): Promise<LegacySyncResult> {
+  clearCachedSummary()
+  return parseSyncResult(
+    await fetchGasAction('changeDay', undefined, 45000),
+    '換天失敗',
   )
 }
 

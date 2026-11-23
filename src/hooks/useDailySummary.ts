@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ContactBookApiError,
+  changeContactBookDay,
   ensureTodayReady,
   fetchDailySummary,
+  isSameCalendarDay,
   loadCachedSummary,
   loadLastSyncAt,
   localTodayKey,
@@ -50,6 +52,8 @@ export function useDailySummary(enabled = true) {
   )
   const [refreshing, setRefreshing] = useState(false)
   const [syncingLegacy, setSyncingLegacy] = useState(false)
+  const [changingDay, setChangingDay] = useState(false)
+  const [changeDayMessage, setChangeDayMessage] = useState<string | null>(null)
   const dayRef = useRef(localTodayKey())
 
   const applySummary = useCallback((data: DailySummary) => {
@@ -140,6 +144,45 @@ export function useDailySummary(enabled = true) {
     }
   }, [applySummary, ensureToday])
 
+  const changeDay = useCallback(async () => {
+    setChangingDay(true)
+    setErrorMessage(null)
+    setChangeDayMessage(null)
+    try {
+      const result = await changeContactBookDay()
+      if (result.summary) {
+        applySummary(result.summary)
+        markEnsuredToday()
+        dayRef.current = localTodayKey()
+      } else {
+        const data = await fetchDailySummary()
+        applySummary(data)
+        markEnsuredToday()
+        dayRef.current = localTodayKey()
+      }
+      setStatus('ok')
+      const today = localTodayKey()
+      if (result.skippedWrite) {
+        setChangeDayMessage(null)
+        setErrorMessage(result.message ?? '無法取得當天資料，聯絡簿未改寫')
+      } else {
+        const shown = result.summary?.dateLabel || today
+        setChangeDayMessage(
+          result.message ||
+            (isSameCalendarDay(shown, today)
+              ? `已換成 ${today} 的聯絡簿`
+              : `已改寫聯絡簿，目前日期為 ${shown}`),
+        )
+        setErrorMessage(null)
+      }
+    } catch (err) {
+      setStatus('error')
+      setErrorMessage(err instanceof Error ? err.message : '換天失敗')
+    } finally {
+      setChangingDay(false)
+    }
+  }, [applySummary])
+
   useEffect(() => {
     if (!enabled) return
     let cancelled = false
@@ -191,8 +234,11 @@ export function useDailySummary(enabled = true) {
     lastSyncAt,
     refreshing,
     syncingLegacy,
+    changingDay,
+    changeDayMessage,
     refresh: () => refresh({ silent: false }),
     syncLegacy,
+    changeDay,
     noticeCount: summary?.notices.length ?? 0,
     subjectCount: summary?.subjects.length ?? 0,
   }

@@ -95,6 +95,9 @@ function handleApi_(action, params) {
         String(params.force || '').toLowerCase() === 'true';
       return json_(ensureTodayReady(forceSync), callback);
     }
+    if (action === 'changeDay' || action === '換天') {
+      return json_(changeDay(), callback);
+    }
     if (action === 'installDailySyncTrigger') {
       return json_(installDailySyncTrigger(), callback);
     }
@@ -195,22 +198,24 @@ function readSubjectsForDate_(ss, todayKey) {
 
 function normalizeDateKey_(raw, tz) {
   if (!raw) return '';
-  // 已是 yyyy/MM/dd
-  if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(raw)) {
-    var parts = raw.split('/');
-    return (
-      parts[0] +
-      '/' +
-      ('0' + parts[1]).slice(-2) +
-      '/' +
-      ('0' + parts[2]).slice(-2)
-    );
+  var text = String(raw).trim();
+  var ymdSlash = text.match(/^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})$/);
+  if (ymdSlash) {
+    return ymdSlash[1] + '/' + ('0' + ymdSlash[2]).slice(-2) + '/' + ('0' + ymdSlash[3]).slice(-2);
   }
-  var d = new Date(raw);
+  var ymdCn = text.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/);
+  if (ymdCn) {
+    return ymdCn[1] + '/' + ('0' + ymdCn[2]).slice(-2) + '/' + ('0' + ymdCn[3]).slice(-2);
+  }
+  var mdy = text.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+  if (mdy) {
+    return mdy[3] + '/' + ('0' + mdy[1]).slice(-2) + '/' + ('0' + mdy[2]).slice(-2);
+  }
+  var d = new Date(text);
   if (!isNaN(d.getTime())) {
-    return Utilities.formatDate(d, tz, 'yyyy/MM/dd');
+    return Utilities.formatDate(d, tz || Session.getScriptTimeZone(), 'yyyy/MM/dd');
   }
-  return String(raw).trim();
+  return text;
 }
 
 function getSpreadsheet_() {
@@ -389,26 +394,7 @@ function saveTodayNotices(notices) {
   var sheet = ss.getSheetByName(SHEET_NOTICES);
   var tz = Session.getScriptTimeZone();
   var todayKey = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd');
-
-  // 刪除今日舊列（由下往上）
-  var last = sheet.getLastRow();
-  if (last >= 2) {
-    var values = sheet.getRange(2, 1, last - 1, 2).getDisplayValues();
-    for (var i = values.length - 1; i >= 0; i--) {
-      if (normalizeDateKey_(String(values[i][0] || ''), tz) === todayKey) {
-        sheet.deleteRow(i + 2);
-      }
-    }
-  }
-
-  var list = notices || [];
-  if (list.length) {
-    var rows = list.map(function (text) {
-      return [todayKey, String(text)];
-    });
-    var startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, rows.length, 2).setValues(rows);
-  }
+  replaceRowsForDate_(sheet, todayKey, tz, normalizeNoticeList_(notices));
   invalidateDailyCache_();
   return getDailySummaryFast_();
 }
@@ -423,27 +409,87 @@ function saveTodaySubjects(subjects) {
   var sheet = ss.getSheetByName(SHEET_SUBJECTS);
   var tz = Session.getScriptTimeZone();
   var todayKey = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd');
+  replaceRowsForDate_(sheet, todayKey, tz, normalizeSubjectList_(subjects));
+  invalidateDailyCache_();
+  return getDailySummaryFast_();
+}
 
+/** 只改寫指定日期的列，其他日期列原樣保留 */
+function replaceRowsForDate_(sheet, dateKey, tz, texts) {
   var last = sheet.getLastRow();
+  var kept = [];
   if (last >= 2) {
     var values = sheet.getRange(2, 1, last - 1, 2).getDisplayValues();
-    for (var i = values.length - 1; i >= 0; i--) {
-      if (normalizeDateKey_(String(values[i][0] || ''), tz) === todayKey) {
-        sheet.deleteRow(i + 2);
-      }
+    for (var i = 0; i < values.length; i++) {
+      var key = normalizeDateKey_(String(values[i][0] || ''), tz);
+      var content = String(values[i][1] || '').trim();
+      if (!content) continue;
+      if (key === dateKey) continue;
+      kept.push([values[i][0], values[i][1]]);
+    }
+  }
+  var list = texts || [];
+  for (var j = 0; j < list.length; j++) {
+    var item = String(list[j] || '').trim();
+    if (item) kept.push([dateKey, item]);
+  }
+  if (last >= 2) {
+    sheet.getRange(2, 1, last - 1, 2).clearContent();
+  }
+  if (kept.length) {
+    sheet.getRange(2, 1, kept.length, 2).setValues(kept);
+  }
+}
+
+/**
+ * 「換天」：向舊版公佈欄取當天資料，依日期覆寫聯絡簿。
+ * 不把昨天滾進來；來源標了別天則當天改為空白。
+ */
+function changeDay() {
+  ensureSchema_();
+  var tz = Session.getScriptTimeZone();
+  var todayKey = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd');
+  invalidateDailyCache_();
+  var fetched = fetchLegacyDailySummary_();
+  var skippedWrite = !!fetched.unreachable;
+  var notices = [];
+  var subjects = [];
+
+  if (!skippedWrite) {
+    var sourceDate = fetched.dateLabel
+      ? normalizeDateKey_(String(fetched.dateLabel), tz)
+      : todayKey;
+    if (sourceDate && sourceDate !== todayKey) {
+      skippedWrite = true;
+      fetched.message =
+        '公佈欄日期是 ' +
+        sourceDate +
+        '，不是今天 ' +
+        todayKey +
+        '，聯絡簿未改寫';
+    } else {
+      notices = normalizeNoticeList_(fetched.notices);
+      subjects = normalizeSubjectList_(fetched.subjects);
+      saveTodayNotices(notices);
+      saveTodaySubjects(subjects);
     }
   }
 
-  var list = subjects || [];
-  if (list.length) {
-    var rows = list.map(function (text) {
-      return [todayKey, String(text)];
-    });
-    var startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, rows.length, 2).setValues(rows);
-  }
-  invalidateDailyCache_();
-  return getDailySummaryFast_();
+  var summary = getDailySummaryFast_();
+  var message = skippedWrite
+    ? fetched.message || '無法取得當天資料，聯絡簿未改寫'
+    : '已換成 ' + todayKey + ' 的聯絡簿（' + summary.notices.length + ' 則）';
+  return {
+    ok: true,
+    source: fetched.source || 'change_day',
+    message: message,
+    dateLabel: todayKey,
+    noticeCount: summary.notices.length,
+    subjectCount: summary.subjects.length,
+    summary: summary,
+    skippedWrite: skippedWrite,
+    replaced: !skippedWrite,
+  };
 }
 
 /** 時間觸發器／排程專用：強制再同步舊版 */
@@ -537,6 +583,27 @@ function syncFromLegacyBoard() {
 
   var notices = fetched.notices || [];
   var subjects = fetched.subjects || [];
+  if (fetched.dateLabel) {
+    var sourceDate = normalizeDateKey_(String(fetched.dateLabel), tz);
+    if (sourceDate && sourceDate !== todayKey) {
+      var keptToday = getDailySummaryFast_();
+      return {
+        ok: true,
+        source: fetched.source,
+        message:
+          '公佈欄日期是 ' +
+          sourceDate +
+          '，不是今天 ' +
+          todayKey +
+          '，已保留現有當天資料',
+        dateLabel: todayKey,
+        noticeCount: keptToday.notices.length,
+        subjectCount: keptToday.subjects.length,
+        summary: keptToday,
+        skippedWrite: true,
+      };
+    }
+  }
 
   // 覆寫今天列（即使為空也不回填昨天）
   saveTodayNotices(notices);
@@ -637,6 +704,7 @@ function fetchLegacyHtmlSummary_() {
       return {
         notices: parsed.notices,
         subjects: parsed.subjects,
+        dateLabel: parsed.dateLabel || '',
         source: 'legacy_html',
         message: '已從舊版公佈欄網頁同步',
       };
@@ -712,7 +780,14 @@ function parseLegacyHtmlPage_(html) {
   subjects = uniqueStrings_(subjects.filter(isLikelySubject_));
 
   if (!notices.length) return null;
-  return { notices: notices, subjects: subjects };
+  return { notices: notices, subjects: subjects, dateLabel: extractLegacyDateLabel_(html) };
+}
+
+function extractLegacyDateLabel_(html) {
+  var text = collapseWs_(stripTags_(html));
+  var match = text.match(/日期\s*[：:]\s*(\d{1,4}[\/.\-年]\d{1,2}[\/.\-月]\d{1,4}日?)/);
+  if (!match) return '';
+  return normalizeDateKey_(match[1], Session.getScriptTimeZone());
 }
 
 function findHeadingIndex_(html, labels) {
@@ -817,9 +892,11 @@ function fetchLegacyJsonSummary_() {
 
       var parsed = JSON.parse(text);
       if (parsed && parsed.error) continue;
+      var dateLabel = parsed.dateLabel || parsed.date || '';
       return {
         notices: normalizeNoticeList_(parsed.notices),
         subjects: normalizeSubjectList_(parsed.subjects),
+        dateLabel: dateLabel ? normalizeDateKey_(String(dateLabel), Session.getScriptTimeZone()) : '',
         source: 'legacy_json',
         message: '已從舊版 JSON API 同步',
       };
@@ -857,6 +934,7 @@ function fetchLegacySheetSummary_() {
   return {
     notices: notices,
     subjects: subjects,
+    dateLabel: todayKey,
     source: 'legacy_sheet',
     message: '已從舊版試算表同步',
   };
@@ -870,7 +948,7 @@ function readLegacyNoticesFromSpreadsheet_(ss, todayKey, tz) {
     for (var c = 0; c < candidateNames.length; c++) {
       if (name.indexOf(candidateNames[c]) >= 0 || name === candidateNames[c]) {
         var rows = readDateContentPairs_(sheets[i], todayKey, tz);
-        if (rows.length) return rows.map(function (t) { return { content: t }; });
+        if (rows.length) return rows;
       }
     }
   }
@@ -878,7 +956,7 @@ function readLegacyNoticesFromSpreadsheet_(ss, todayKey, tz) {
   for (var j = 0; j < sheets.length; j++) {
     var found = readDateContentPairs_(sheets[j], todayKey, tz);
     if (found.length) {
-      return found.map(function (t) { return { content: t }; });
+      return found;
     }
   }
   return [];

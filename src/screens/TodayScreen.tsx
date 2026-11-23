@@ -4,7 +4,10 @@ type Props = {
   summary: DailySummary | null
   status: FetchStatus
   errorMessage: string | null
+  changingDay?: boolean
+  changeDayMessage?: string | null
   onGoSync: () => void
+  onChangeDay?: () => void
 }
 
 function formatDateLabel(summary: DailySummary | null): string {
@@ -21,7 +24,10 @@ export function TodayScreen({
   summary,
   status,
   errorMessage,
+  changingDay = false,
+  changeDayMessage = null,
   onGoSync,
+  onChangeDay,
 }: Props) {
   const notices = summary?.notices ?? []
   const subjects = summary?.subjects ?? []
@@ -33,6 +39,26 @@ export function TodayScreen({
         <p className="eyebrow">班級家庭聯絡簿</p>
         <h1>今日放學公佈欄</h1>
         <p className="date-line">{formatDateLabel(summary)}</p>
+        {onChangeDay && (
+          <div className="change-day-row">
+            <button
+              type="button"
+              className="btn primary wide"
+              onClick={onChangeDay}
+              disabled={changingDay || loading}
+            >
+              {changingDay ? '正在換成當天…' : '換天'}
+            </button>
+            <p className="muted change-day-hint">
+              按下後會向公佈欄取「當天」資料，並依日期替換聯絡簿。
+            </p>
+            {changeDayMessage && (
+              <p className="login-hint muted" role="status">
+                {changeDayMessage}
+              </p>
+            )}
+          </div>
+        )}
       </header>
 
       {loading && (
@@ -58,6 +84,12 @@ export function TodayScreen({
           <button type="button" className="btn ghost" onClick={onGoSync}>
             前往更新頁重試
           </button>
+        </div>
+      )}
+
+      {status !== 'error' && status !== 'needs_api' && errorMessage && (
+        <div className="panel warn-panel" role="status">
+          <p>{errorMessage}</p>
         </div>
       )}
 
