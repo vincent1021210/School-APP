@@ -46,6 +46,8 @@ android/*.iml
 android/.idea
 *.apk
 !releases/*.apk
+!public/*.apk
+!docs/*.apk
 *.aab
 *.jks
 *.keystore

@@ -226,25 +226,9 @@ export function SyncScreen({
       <div className="panel">
         <h2>安裝成手機 App</h2>
         <p className="muted">
-          這是 PWA：用手機 Chrome 開啟網站可「加到主畫面」。Android 也可安裝 APK（GitHub Actions
-          產物 <code>家庭聯絡簿.apk</code>）。
+          用手機打開網站會自動開始下載 APK；下載完成後點「開啟」即可安裝。也可加到主畫面當
+          PWA。
         </p>
-        <ol className="steps">
-          <li>Chrome：選單 → 安裝應用程式／加到主畫面</li>
-          <li>iPhone：Safari 分享 → 加入主畫面</li>
-          <li>
-            APK：到{' '}
-            <a
-              className="text-link"
-              href="https://github.com/vincent1021210/School-APP/actions/workflows/android-apk.yml"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Build Android APK
-            </a>{' '}
-            下載 <code>家庭聯絡簿.apk</code>
-          </li>
-        </ol>
       </div>
 
       <form className="panel" onSubmit={(e) => void handleSubscribe(e)}>

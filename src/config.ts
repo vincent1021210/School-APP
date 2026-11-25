@@ -25,6 +25,10 @@ export const APP_ROLE = 'dismissal_board' as const
 export const APP_NAME = '家庭聯絡簿'
 export const APP_SUBTITLE = '班級放學公佈欄'
 
+/** 與網站同網域的 APK，開啟網頁即可自動下載安裝 */
+export const APK_DOWNLOAD_URL = `${import.meta.env.BASE_URL}家庭聯絡簿.apk`
+export const APK_FILE_NAME = '家庭聯絡簿.apk'
+
 /** 舊版放學大螢幕（同步來源） */
 export const LEGACY_CONTACT_BOOK_URL =
   'https://script.google.com/macros/s/AKfycbwBE0IVr9JuF92lpHMTUQiTgIpjxBYZWidAXHEfICwumlHggm31kfbD3Y3_mlznVuES/exec'

@@ -40,6 +40,7 @@ export default function App() {
             正在確認登入狀態…
           </div>
         </main>
+        <InstallAppBar />
       </div>
     )
   }
@@ -51,7 +52,6 @@ export default function App() {
           <span className="brand-name">{APP_NAME}</span>
           <span className="brand-sub">{APP_SUBTITLE}</span>
         </div>
-        <InstallAppBar />
         <main className="app-main">
           <LoginScreen
             busy={auth.busy}
@@ -66,6 +66,7 @@ export default function App() {
             onClearError={auth.clearError}
           />
         </main>
+        <InstallAppBar />
       </div>
     )
   }
@@ -97,8 +98,6 @@ export default function App() {
           </p>
         )}
       </div>
-
-      <InstallAppBar />
 
       <main className="app-main">
         {tab === 'today' && (
@@ -144,6 +143,7 @@ export default function App() {
       </main>
 
       <BottomNav active={tab} onChange={setTab} />
+      <InstallAppBar />
     </div>
   )
 }
