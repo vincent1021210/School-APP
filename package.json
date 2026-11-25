@@ -5,13 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "icons": "node scripts/generate-icons.mjs",
     "build": "tsc -b && vite build",
+    "build:native": "tsc -b && vite build --base /",
     "lint": "oxlint src",
     "preview": "vite preview",
     "deploy:pages": "npm run build && node scripts/sync-docs.mjs && npx --yes gh-pages -d dist -m \"deploy: GitHub Pages\"",
-    "scrape:legacy": "node scripts/scrape-legacy-board.mjs"
+    "scrape:legacy": "node scripts/scrape-legacy-board.mjs",
+    "cap:sync": "npm run icons && npm run build:native && npx cap sync android",
+    "apk:debug": "npm run cap:sync && node scripts/assemble-apk.mjs"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
@@ -23,6 +32,7 @@
     "@vitejs/plugin-react": "^6.1.2",
     "oxlint": "^1.90.0",
     "typescript": "~7.0.2",
-    "vite": "^8.3.6"
+    "vite": "^8.3.6",
+    "vite-plugin-pwa": "^2.0.0"
   }
 }

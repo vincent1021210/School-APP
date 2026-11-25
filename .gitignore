@@ -35,3 +35,18 @@ legacy-scrape.json
 summary.json
 sync-result.json
 mail-result.json
+
+# Capacitor / Android
+android/.gradle
+android/app/build
+android/build
+android/local.properties
+android/captures
+android/*.iml
+android/.idea
+*.apk
+!releases/*.apk
+*.aab
+*.jks
+*.keystore
+node_modules/.tmp

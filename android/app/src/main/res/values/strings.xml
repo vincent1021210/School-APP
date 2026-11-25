@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">家庭聯絡簿</string>
+    <string name="title_activity_main">家庭聯絡簿</string>
+    <string name="package_name">com.schoolapp.contactbook</string>
+    <string name="custom_url_scheme">com.schoolapp.contactbook</string>
+</resources>

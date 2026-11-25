@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { BottomNav } from './components/BottomNav'
+import { InstallAppBar } from './components/InstallAppBar'
 import { useAuth } from './hooks/useAuth'
 import { useDailySummary } from './hooks/useDailySummary'
 import { LoginScreen } from './screens/LoginScreen'
@@ -50,6 +51,7 @@ export default function App() {
           <span className="brand-name">{APP_NAME}</span>
           <span className="brand-sub">{APP_SUBTITLE}</span>
         </div>
+        <InstallAppBar />
         <main className="app-main">
           <LoginScreen
             busy={auth.busy}
@@ -95,6 +97,8 @@ export default function App() {
           </p>
         )}
       </div>
+
+      <InstallAppBar />
 
       <main className="app-main">
         {tab === 'today' && (
